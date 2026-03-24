@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sitzplan Creator - V15 (Cross-Device Sync)</title>
+    <title>Sitzplan Creator - V16 (Reset & iPad Sync)</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
@@ -153,7 +153,11 @@
             <p id="auth-desc" style="color: var(--text-muted); font-size: 13px;">Legen Sie ein Master-Passwort fest, um Ihre Schülerdaten ab sofort zu verschlüsseln.</p>
             <input type="password" id="auth-pwd" class="auth-input" placeholder="Ihr Passwort..." onkeypress="if(event.key==='Enter') submitAuth()">
             <button class="action-btn" style="width: 100%; padding: 12px; font-size: 15px;" onclick="submitAuth()" id="auth-btn">Datenbankschutz aktivieren</button>
-            <p style="color: #ef4444; font-size: 11px; margin-top: 15px; font-weight: bold;">Achtung: Wenn Sie dieses Passwort vergessen, sind Ihre Pläne unwiderruflich verloren!</p>
+            <p style="color: #ef4444; font-size: 11px; margin-top: 15px; font-weight: bold;">Achtung: Wenn Sie dieses Passwort vergessen, sind Ihre Pläne im Browser verloren!</p>
+            
+            <div style="margin-top: 20px; text-align: center;">
+                <a href="#" onclick="factoryReset()" style="color: var(--text-muted); font-size: 12px; text-decoration: underline;">Passwort vergessen? (App zurücksetzen)</a>
+            </div>
         </div>
     </div>
 
@@ -311,7 +315,7 @@
             <hr style="border: 0; border-top: 1px solid var(--border-color);">
             <div style="display: flex; gap: 8px; flex-direction: column;">
                 <button class="action-btn" onclick="printPlan()" style="width: 100%; background: #10b981;">🖨️ Aktuellen Plan als PDF drucken</button>
-                <button class="action-btn" onclick="exportToFile()" style="width: 100%; background: var(--text-main);" title="Speichert direkt in deiner Cloud/PC">💾 Datei Speichern (PC/Mac)</button>
+                <button class="action-btn" onclick="exportToFile()" style="width: 100%; background: var(--text-main);" title="Speichert direkt in deiner Cloud/PC">💾 Datei Speichern / Exportieren</button>
                 
                 <div style="display: flex; gap: 5px;">
                     <button class="action-btn" onclick="triggerImport('merge')" style="flex: 1; background: #3b82f6; font-size: 11px;">📂 Alte Daten zusammenführen</button>
@@ -319,6 +323,9 @@
                 </div>
                 <input type="file" id="fallback-input-merge" style="display: none;" accept=".json" onchange="handleMergeFileLegacy(event)">
                 <input type="file" id="fallback-input-full" style="display: none;" accept=".json" onchange="importFromFileFullLegacy(event)">
+                
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin-top: 10px;">
+                <button class="action-btn" onclick="factoryReset()" style="width: 100%; background: transparent; border: 1px solid #ef4444; color: #ef4444;">🚨 Lokale App-Daten löschen</button>
             </div>
         </div>
     </div>
@@ -343,7 +350,7 @@
         // 1. KRYPTO & DATENSTRUKTUR
         // ==========================================
         let appPassword = null;
-        const STORAGE_KEY = 'sitzplan_v14_crypto'; // Wird weiter genutzt
+        const STORAGE_KEY = 'sitzplan_v14_crypto'; // Behalten wir bei für Kompatibilität
 
         let appData = {
             settings: { shortNames: false, snap: true, fontSize: 13, colorDesk: '#fef08a', colorBg: '#f8fafc', rsg: false, teacher: '', year: '' },
@@ -374,14 +381,13 @@
 
         function checkAuth() {
             const saved = localStorage.getItem(STORAGE_KEY);
-            const legacy13 = localStorage.getItem('sitzplan_v13_crypto'); 
             
             const overlay = document.getElementById('auth-overlay');
             const title = document.getElementById('auth-title');
             const desc = document.getElementById('auth-desc');
             const btn = document.getElementById('auth-btn');
 
-            if(saved || legacy13) {
+            if(saved) {
                 title.innerText = "Datenbank gesperrt";
                 desc.innerText = "Bitte geben Sie Ihr Master-Passwort ein, um die Daten zu entschlüsseln.";
                 btn.innerText = "Datenbank entsperren";
@@ -397,12 +403,10 @@
             if(!pwd) return alert("Bitte ein Passwort eingeben!");
             
             const saved = localStorage.getItem(STORAGE_KEY);
-            const legacy13 = localStorage.getItem('sitzplan_v13_crypto');
 
-            if(saved || legacy13) {
+            if(saved) {
                 try {
-                    const dataToDecrypt = saved || legacy13;
-                    const parsed = JSON.parse(dataToDecrypt);
+                    const parsed = JSON.parse(saved);
                     const bytes = CryptoJS.AES.decrypt(parsed.data, pwd);
                     const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
                     if(!decryptedStr) throw new Error("Wrong password");
@@ -410,10 +414,6 @@
                     const decryptedObj = JSON.parse(decryptedStr);
                     appPassword = pwd;
                     document.getElementById('auth-overlay').style.display = 'none';
-                    if(legacy13) {
-                        localStorage.removeItem('sitzplan_v13_crypto');
-                        saveState(); 
-                    }
                     loadAppData(decryptedObj);
                 } catch(e) { alert("Falsches Passwort!"); }
             } else {
@@ -421,6 +421,17 @@
                 document.getElementById('auth-overlay').style.display = 'none';
                 saveState(); 
                 loadAppData(null);
+            }
+        }
+
+        // --- NEU: WERKSEINSTELLUNGEN ZURÜCKSETZEN ---
+        function factoryReset() {
+            const msg = "ACHTUNG: Dies löscht alle deine lokal im Browser gespeicherten Sitzpläne und Einstellungen unwiderruflich!\n\nBereits von dir als Datei (.json) exportierte Pläne bleiben natürlich auf deiner Festplatte/Cloud erhalten.\n\nMöchtest du die App wirklich komplett zurücksetzen?";
+            if(confirm(msg)) {
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem('sitzplan_v13_crypto');
+                localStorage.removeItem('sitzplan_v12_data');
+                window.location.reload();
             }
         }
 
@@ -447,7 +458,7 @@
 
             const payload = JSON.stringify(appData);
             const encrypted = CryptoJS.AES.encrypt(payload, appPassword).toString();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 15, data: encrypted }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 16, data: encrypted }));
         }
 
         function loadAppData(decryptedObj) {
@@ -457,14 +468,13 @@
             if(!appData.activeClassId || !appData.classes[appData.activeClassId]) appData.activeClassId = Object.keys(appData.classes)[0];
             if(!appData.activePlanId || !appData.classes[appData.activeClassId].plans[appData.activePlanId]) appData.activePlanId = Object.keys(appData.classes[appData.activeClassId].plans)[0];
 
-            // Hier wird alles visuell aus den Daten in die UI geladen
             loadSettingsUI(); 
             updateNavUI(); 
             loadPlan();
         }
 
         // ==========================================
-        // 3. MODERN FILE SYSTEM ACCESS API (PC/Mac Sync)
+        // 3. MODERN FILE SYSTEM API & IPAD FALLBACK
         // ==========================================
         async function exportToFile() {
             saveState();
@@ -475,6 +485,7 @@
             
             const dataToExport = localStorage.getItem(STORAGE_KEY);
 
+            // PC/Mac: Nutzt die moderne "Speichern unter..." API
             if (window.showSaveFilePicker) {
                 try {
                     const handle = await window.showSaveFilePicker({
@@ -492,9 +503,16 @@
                 }
             }
 
-            // Fallback iPad
+            // iPad/Safari/Firefox Fallback: Wirkt wie "Speichern unter", indem wir vor dem Download nach dem Namen fragen
+            let customName = prompt("Unter welchem Namen möchtest du die Datei auf deinem Gerät speichern?", fileName);
+            if (!customName) return; // Benutzer hat abgebrochen
+            if (!customName.endsWith('.json')) customName += '.json';
+
             const blob = new Blob([dataToExport], { type: 'application/json' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; a.click();
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(blob); 
+            a.download = customName; 
+            a.click();
         }
 
         function triggerImport(type) {
@@ -529,6 +547,7 @@
             try {
                 const parsed = JSON.parse(jsonString);
                 if((parsed.version >= 13) && parsed.data) {
+                    // Erlaubt das Laden fremder/alter Dateien mit ihrem damaligen Passwort
                     const pwd = prompt("Bitte das Passwort für DIESE externe Datei eingeben:");
                     if(pwd === null) return;
                     const bytes = CryptoJS.AES.decrypt(parsed.data, pwd);
@@ -548,10 +567,7 @@
                 if(confirm("ACHTUNG: Dies löscht alle aktuellen Klassen in diesem Browser. Fortfahren?")) {
                     appData = decryptedObj;
                     appPassword = usedPwd; 
-                    
-                    // WICHTIG: Einstellungen visuell sofort übernehmen (Der V15 Fix)
                     loadSettingsUI();
-                    
                     updateNavUI(); 
                     loadPlan(); 
                     saveState(); 
@@ -683,7 +699,6 @@
             document.getElementById('setting-font-size').value = appData.settings.fontSize || 13;
             document.getElementById('setting-color-desk').value = appData.settings.colorDesk || '#fef08a';
             document.getElementById('setting-color-bg').value = appData.settings.colorBg || '#f8fafc';
-            // Die Einstellungen sofort optisch umsetzen
             applySettings();
         }
 
