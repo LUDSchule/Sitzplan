@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sitzplan Creator - V10 (RSG Final)</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        /* CSS Variablen für das dynamische Design */
+        :root {
+            /* Standard-Farben (Auszug) */
+            --bg-body: #f1f5f9;
+            --bg-ui: #ffffff;
+            --border-color: #e2e8f0;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --room-bg: #f8fafc;
+            --desk-bg: #fef08a;
+            --desk-border: #ca8a04;
+            --board-bg: #ffffff;
+            --board-border: #cbd5e1;
+            --global-font-size: 13px;
+            
+            --text-title: var(--text-main);
+            --dz-color: var(--text-main); /* Textfarbe in Dropzone */
+        }
+
+        /* --- RSG-VERSION FARBOVERRIDE --- */
+        body.rsg-version {
+            /* Grundlegende UI-Farben */
+            --bg-body: #ffffff; 
+            --bg-ui: #f0f4f8; 
+            --border-color: #0a3d66; /* RSG Dunkelblau */
+            
+            /* Text- und Akzentfarben */
+            --primary: #0a3d66; 
+            --primary-hover: #072e4d;
+            --text-main: #0a3d66; 
+            --text-title: #0a3d66; 
+            --text-muted: #3b9ce0; /* RSG Hellblau */
+
+            /* Schülertische (Hellblau) */
+            --desk-bg: #e0f2fe; 
+            --desk-border: #3b9ce0; 
+            --dz-color: #0a3d66; 
+            
+            /* Whiteboard */
+            --board-border: #0a3d66; 
+        }
+
+        /* Lehrerpult in der RSG-Version (Rot) */
+        body.rsg-version .teacher-desk {
+            background: #fee2e2 !important;
+            border-color: #cc1a1a !important;
+        }
+        body.rsg-version .teacher-desk .drop-zone {
+            color: #cc1a1a !important;
+        }
+
+        * { box-sizing: border-box; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; user-select: none; }
+        
+        body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background-color: var(--room-bg); overflow: hidden; color: var(--text-main); font-size: var(--global-font-size); }
+        input, textarea, button { font-size: inherit; user-select: auto; }
+
+        /* --- Top Bar --- */
+        #top-bar { background: var(--bg-ui); padding: 10px 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); z-index: 200; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+        .logo-area { display: flex; align-items: center; }
+        .logo { font-weight: 800; font-size: 1.2em; letter-spacing: -0.5px; color: var(--text-title); text-decoration: none;}
+        .top-btn { background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-weight: 500; }
+        .top-btn:hover { background: #e2e8f0; }
+        #plan-select { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); font-weight: bold; outline: none; }
+        
+        .zoom-controls { display: flex; align-items: center; gap: 5px; margin-left: auto; background: var(--bg-body); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color); }
+        .zoom-btn { background: none; border: none; cursor: pointer; padding: 2px 10px; font-weight: bold; font-size: 1.2em; color: var(--text-muted); }
+        .zoom-btn:hover { color: var(--primary); }
+        
+        .icon-btn { background: none; border: none; font-size: 1.4em; cursor: pointer; color: var(--text-muted); transition: color 0.2s; margin-left: 10px; display: flex; align-items: center; justify-content: center; }
+        .icon-btn:hover { color: var(--text-main); transform: rotate(45deg); }
+
+        /* --- Main Area & Room --- */
+        #main-area { display: flex; flex: 1; overflow: hidden; position: relative; }
+        
+        #room { flex: 1; position: relative; background-color: var(--room-bg); margin: 15px; border-radius: 12px; overflow: hidden; cursor: grab; background-image: radial-gradient(var(--border-color) 1px, transparent 1px); background-size: 25px 25px; box-shadow: inset 0 0 20px rgba(0,0,0,0.02); border: 1px solid var(--border-color); }
+        #room:active { cursor: grabbing; }
+        #canvas { position: absolute; width: 5000px; height: 5000px; transform-origin: top left; pointer-events: none; }
+        .furniture { pointer-events: auto; }
+
+        /* --- Seitenleiste --- */
+        #sidebar { width: 260px; background: var(--bg-ui); border-left: 1px solid var(--border-color); transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; z-index: 100; box-shadow: -4px 0 15px rgba(0,0,0,0.03); flex-shrink: 0; }
+        #sidebar.collapsed { width: 80px; }
+        .sidebar-header { padding: 12px 15px; background: var(--bg-body); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color);}
+        #toggle-sidebar { cursor: pointer; border: none; background: var(--bg-ui); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        #name-list-view, #name-stack-view { padding: 15px; overflow-y: auto; flex: 1; }
+        #sidebar.collapsed #name-list-view { display: none; }
+        #sidebar:not(.collapsed) #name-stack-view { display: none; }
+        
+        .name-item { background: var(--bg-body); padding: 10px; margin-bottom: 8px; border-radius: 8px; border: 1px solid var(--border-color); cursor: grab; text-align: center; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.02); transition: transform 0.1s; }
+        .name-item:active { cursor: grabbing; transform: scale(0.98); }
+        #stack-top { background: var(--primary); color: white; height: 90px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 1.3em; font-weight: bold; cursor: grab; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3); }
+        
+        /* Toolbar Unten */
+        #toolbar { background: var(--bg-ui); padding: 12px 20px; display: flex; gap: 25px; box-shadow: 0 -4px 15px rgba(0,0,0,0.03); border-top: 1px solid var(--border-color); z-index: 100; flex-shrink: 0; overflow-x: auto; align-items: center; }
+        .toolbar-group { display: flex; gap: 10px; align-items: center; border-right: 1px solid var(--border-color); padding-right: 25px; }
+        .toolbar-group:last-child { border-right: none; }
+        .stepper { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+        .stepper-btns { display: flex; background: var(--bg-body); border-radius: 6px; border: 1px solid var(--border-color); overflow: hidden; }
+        .stepper-btns button { padding: 6px 12px; border: none; background: none; cursor: pointer; font-weight: bold; }
+        .stepper-btns button:hover { background: #e2e8f0; }
+        .stepper-btns input { width: 35px; text-align: center; border: none; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); background: white; font-weight: bold;}
+        .action-btn { padding: 8px 14px; cursor: pointer; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: 600; transition: background 0.2s; white-space: nowrap; }
+        .action-btn:hover { background: var(--primary-hover); }
+
+        /* --- Möbel Styling --- */
+        .furniture { position: absolute; border-radius: 6px; display: flex; flex-direction: column; resize: both; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); cursor: move; transform-origin: 50% 50%; min-width: 60px; min-height: 40px; }
+        .furniture .control-icon { opacity: 0; transition: opacity 0.2s ease; position: absolute; z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white; border: none; font-size: 12px; }
+        .furniture:hover .control-icon { opacity: 1; }
+        
+        @media (hover: none) { .furniture .control-icon { opacity: 0.8; } }
+
+        .delete-btn { top: -6px; right: -6px; width: 24px; height: 24px; background: #ef4444; cursor: pointer; font-weight: bold; }
+        .rotate-handle { bottom: -6px; left: -6px; width: 26px; height: 26px; background: var(--primary); cursor: grab; font-size: 16px; }
+        
+        .desk { background: var(--desk-bg); border: 2px solid var(--desk-border); }
+        .desk-single { width: 90px; height: 80px; }
+        .desk-double { width: 160px; height: 80px; }
+        .teacher-desk { background: #fca5a5; border: 2px solid #dc2626; width: 120px; height: 70px; }
+        .board { background: var(--board-bg); border: 3px solid var(--board-border); border-bottom: 8px solid #94a3b8; width: 200px; height: 50px; color: var(--text-main); font-weight: bold; font-size: 1.1em; }
+        .board-text, .placeholder-text { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; pointer-events: none; text-align: center; padding: 4px; word-break: break-word;}
+        .placeholder-item { background: transparent; border: 2px dashed var(--text-muted); color: var(--text-muted); width: 100px; height: 100px; font-weight: 600; }
+
+        /* Drop-Zones */
+        .seats-container { display: flex; flex: 1; width: 100%; height: 100%; pointer-events: none; }
+        .drop-zone { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; word-break: break-word; padding: 2px; border-right: 1px dashed rgba(0,0,0,0.15); pointer-events: auto; color: var(--dz-color); }
+        .drop-zone:last-child { border-right: none; }
+        .drop-zone.hover { background-color: rgba(255, 255, 255, 0.6); }
+
+        /* --- Settings Modal --- */
+        #settings-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
+        .modal-content { background: var(--bg-ui); padding: 25px; border-radius: 12px; width: 350px; max-width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; font-weight: bold; font-size: 1.2em; }
+        .modal-close { cursor: pointer; font-size: 1.5em; color: var(--text-muted); line-height: 1; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; }
+        .setting-row input[type="color"] { border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; padding: 0; }
+        
+        #drag-ghost { position: fixed; pointer-events: none; z-index: 9999; opacity: 0.9; transform: translate(-50%, -50%); background: var(--primary); color: white; padding: 10px; border-radius: 8px; font-weight: bold; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <div class="logo-area">
+            <img id="rsg-logo" src="logo.png" alt="RSG Logo" style="display: none; height: 32px; margin-right: 12px; transition: opacity 0.3s; object-fit: contain;">
+            <span id="top-title" class="logo">SitzplanPro</span>
+        </div>
+        <select id="plan-select" onchange="switchPlan()"></select>
+        <button class="top-btn" onclick="createNewPlan()">+ Neu</button>
+        <button class="top-btn" onclick="renameCurrentPlan()">Umbenennen</button>
+
+        <div class="zoom-controls">
+            <button class="zoom-btn" onclick="setZoom(-0.1)">-</button>
+            <span id="zoom-level" style="width: 45px; text-align: center; font-weight: 600;">100%</span>
+            <button class="zoom-btn" onclick="setZoom(0.1)">+</button>
+            <button class="zoom-btn" onclick="resetView()" title="Zentrieren">⌂</button>
+        </div>
+
+        <button class="icon-btn" onclick="openSettings()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+    </div>
+
+    <div id="main-area">
+        <div id="room">
+            <div id="canvas"></div>
+        </div>
+
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <span id="sidebar-title" style="font-weight: bold;">Klasse</span>
+                <button id="toggle-sidebar">⇄</button>
+            </div>
+            
+            <div id="name-list-view">
+                <textarea id="name-input" rows="4" style="width: 100%; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 6px; padding: 5px;" placeholder="Namen eingeben..."></textarea>
+                <div style="display: flex; gap: 5px; margin-bottom: 15px;">
+                    <button class="action-btn" onclick="importNamesFromText()" style="flex: 1; padding: 6px;">Laden</button>
+                    <button class="action-btn" onclick="document.getElementById('excel-input').click()" style="flex: 1; padding: 6px; background: #0f766e;">.xlsx</button>
+                    <input type="file" id="excel-input" style="display: none;" accept=".xlsx, .xls" onchange="importFromExcel(event)">
+                </div>
+                <div id="list-container"></div>
+            </div>
+
+            <div id="name-stack-view">
+                <div id="stack-top">Leer</div>
+                <div style="text-align: center; margin-top: 10px; color: var(--text-muted); font-weight: bold;" id="stack-count">0 übrig</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toolbar">
+        <div class="toolbar-group">
+            <span>Einzeltisch</span>
+            <div class="stepper-btns">
+                <button onclick="changeCount('desk-single', -1)">-</button>
+                <input type="number" id="count-desk-single" value="0" readonly>
+                <button onclick="changeCount('desk-single', 1)">+</button>
+            </div>
+        </div>
+        <div class="toolbar-group">
+            <span>Doppeltisch</span>
+            <div class="stepper-btns">
+                <button onclick="changeCount('desk-double', -1)">-</button>
+                <input type="number" id="count-desk-double" value="0" readonly>
+                <button onclick="changeCount('desk-double', 1)">+</button>
+            </div>
+        </div>
+        <div class="toolbar-group">
+            <span>Lehrerpult</span>
+            <div class="stepper-btns">
+                <button onclick="changeCount('teacher-desk', -1)">-</button>
+                <input type="number" id="count-teacher-desk" value="0" readonly>
+                <button onclick="changeCount('teacher-desk', 1)">+</button>
+            </div>
+        </div>
+        <div class="toolbar-group">
+            <span>Whiteboard</span>
+            <div class="stepper-btns">
+                <button onclick="changeCount('board', -1)">-</button>
+                <input type="number" id="count-board" value="0" readonly>
+                <button onclick="changeCount('board', 1)">+</button>
+            </div>
+        </div>
+        <div class="toolbar-group" style="border: none;">
+            <button class="action-btn" style="background: var(--text-muted);" onclick="addPlaceholder()">+ Platzhalter</button>
+        </div>
+    </div>
+
+    <div id="settings-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                Einstellungen
+                <div class="modal-close" onclick="closeSettings()">×</div>
+            </div>
+            
+            <div class="setting-row">
+                <label>RSG-Version aktivieren</label>
+                <input type="checkbox" id="setting-rsg" onchange="applySettings()">
+            </div>
+            <hr style="border: 0; border-top: 1px solid var(--border-color);">
+
+            <div class="setting-row">
+                <label>Nachnamen abkürzen</label>
+                <input type="checkbox" id="setting-short-names" onchange="applySettings()">
+            </div>
+            <div class="setting-row">
+                <label>Sanftes Einrasten</label>
+                <input type="checkbox" id="setting-snap" checked onchange="applySettings()">
+            </div>
+            <hr style="border: 0; border-top: 1px solid var(--border-color);">
+            <div class="setting-row">
+                <label>Schriftgröße</label>
+                <input type="range" id="setting-font-size" min="10" max="18" value="13" onchange="applySettings()">
+            </div>
+            <div class="setting-row">
+                <label>Farbe: Tische</label>
+                <input type="color" id="setting-color-desk" value="#fef08a" onchange="applySettings()">
+            </div>
+            <div class="setting-row">
+                <label>Farbe: Hintergrund</label>
+                <input type="color" id="setting-color-bg" value="#f8fafc" onchange="applySettings()">
+            </div>
+            <hr style="border: 0; border-top: 1px solid var(--border-color);">
+            <div style="display: flex; gap: 10px; flex-direction: column;">
+                <button class="action-btn" onclick="exportToFile()" style="width: 100%; background: var(--text-main);">Datenbank Speichern (.json)</button>
+                <button class="action-btn" onclick="document.getElementById('file-input').click()" style="width: 100%; background: var(--text-muted);">Datenbank Laden (.json)</button>
+                <input type="file" id="file-input" style="display: none;" accept=".json" onchange="importFromFile(event)">
+                <button class="action-btn" onclick="deleteCurrentPlan()" style="width: 100%; background: #ef4444; margin-top: 10px;">Aktuellen Plan Löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. STATE & SETTINGS
+        // ==========================================
+        let appData = {
+            activePlanId: 'plan_1',
+            settings: { 
+                shortNames: false, snap: true, fontSize: 13, 
+                colorDesk: '#fef08a', colorBg: '#f8fafc',
+                rsg: false
+            },
+            plans: { 'plan_1': { name: 'Mein erster Plan', names: [], furniture: [] } }
+        };
+        let studentNames = []; 
+        let furnitureIdCounter = 0;
+        let scale = 1, panX = 0, panY = 0, isPanning = false;
+
+        const roomEl = document.getElementById('room');
+        const canvasEl = document.getElementById('canvas');
+
+        // Modal Logic
+        function openSettings() { document.getElementById('settings-modal').style.display = 'flex'; }
+        function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
+        
+        function applySettings() {
+            appData.settings.rsg = document.getElementById('setting-rsg').checked;
+            appData.settings.shortNames = document.getElementById('setting-short-names').checked;
+            appData.settings.snap = document.getElementById('setting-snap').checked;
+            appData.settings.fontSize = document.getElementById('setting-font-size').value;
+            appData.settings.colorDesk = document.getElementById('setting-color-desk').value;
+            appData.settings.colorBg = document.getElementById('setting-color-bg').value;
+
+            // RSG Version Umschaltung
+            const rsgLogo = document.getElementById('rsg-logo');
+            const topTitle = document.getElementById('top-title');
+            const colorControls = document.querySelectorAll('#settings-modal .setting-row input[type="color"]');
+
+            if (appData.settings.rsg) {
+                document.body.classList.add('rsg-version');
+                rsgLogo.style.display = 'block';
+                rsgLogo.style.opacity = '1';
+                topTitle.innerText = "RSG Sitzplan";
+                colorControls.forEach(control => control.disabled = true);
+            } else {
+                document.body.classList.remove('rsg-version');
+                rsgLogo.style.opacity = '0';
+                setTimeout(() => rsgLogo.style.display = 'none', 300);
+                topTitle.innerText = "SitzplanPro";
+                colorControls.forEach(control => control.disabled = false);
+            }
+
+            // CSS Variablen setzen
+            document.documentElement.style.setProperty('--global-font-size', appData.settings.fontSize + 'px');
+            if (!appData.settings.rsg) {
+                document.documentElement.style.setProperty('--desk-bg', appData.settings.colorDesk);
+                document.documentElement.style.setProperty('--room-bg', appData.settings.colorBg);
+            }
+            
+            // Re-render
+            renderNames();
+            document.querySelectorAll('.drop-zone').forEach(dz => {
+                if(dz.dataset.fullName && dz.dataset.fullName !== "Lehrer") {
+                    dz.innerText = formatName(dz.dataset.fullName);
+                }
+            });
+            saveState();
+        }
+
+        function loadSettingsUI() {
+            document.getElementById('setting-rsg').checked = appData.settings.rsg;
+            document.getElementById('setting-short-names').checked = appData.settings.shortNames;
+            document.getElementById('setting-snap').checked = appData.settings.snap !== false;
+            document.getElementById('setting-font-size').value = appData.settings.fontSize || 13;
+            document.getElementById('setting-color-desk').value = appData.settings.colorDesk || '#fef08a';
+            document.getElementById('setting-color-bg').value = appData.settings.colorBg || '#f8fafc';
+            applySettings();
+        }
+
+        // Namens-Formatierung
+        function formatName(fullName) {
+            if (!fullName) return "";
+            if (!appData.settings.shortNames) return fullName;
+            let parts = fullName.trim().split(' ');
+            if(parts.length > 1) {
+                return parts[0] + " " + parts[parts.length-1].charAt(0) + ".";
+            }
+            return parts[0];
+        }
+
+        // ==========================================
+        // 2. CUSTOM DRAG & DROP ENGINE
+        // ==========================================
+        let dragGhost = null;
+        let draggedNameOriginal = "";
+        let currentHoverZone = null;
+
+        function attachDragEvents(element, nameFetcher, isStack) {
+            const startDrag = (e) => {
+                const name = nameFetcher();
+                if(!name || name === "Leer" || name === "Lehrer") return;
+                e.preventDefault();
+                
+                draggedNameOriginal = name;
+                
+                dragGhost = document.createElement('div');
+                dragGhost.id = 'drag-ghost';
+                dragGhost.innerText = formatName(name);
+                document.body.appendChild(dragGhost);
+                
+                moveGhost(e);
+
+                document.addEventListener('mousemove', dragMove);
+                document.addEventListener('touchmove', dragMove, {passive: false});
+                document.addEventListener('mouseup', dragEnd);
+                document.addEventListener('touchend', dragEnd);
+                
+                if(isStack) element.style.opacity = '0.5';
+            };
+
+            element.addEventListener('mousedown', startDrag);
+            element.addEventListener('touchstart', startDrag, {passive: false});
+        }
+
+        function moveGhost(e) {
+            if(!dragGhost) return;
+            const point = e.touches ? e.touches[0] : e;
+            dragGhost.style.left = point.clientX + 'px';
+            dragGhost.style.top = point.clientY + 'px';
+        }
+
+        function dragMove(e) {
+            e.preventDefault();
+            moveGhost(e);
+
+            const point = e.touches ? e.touches[0] : e;
+            const target = document.elementFromPoint(point.clientX, point.clientY);
+
+            if (currentHoverZone && currentHoverZone !== target) {
+                currentHoverZone.classList.remove('hover');
+                currentHoverZone = null;
+            }
+
+            if (target && target.classList.contains('drop-zone')) {
+                currentHoverZone = target;
+                currentHoverZone.classList.add('hover');
+            }
+        }
+
+        function dragEnd(e) {
+            document.removeEventListener('mousemove', dragMove);
+            document.removeEventListener('touchmove', dragMove);
+            document.removeEventListener('mouseup', dragEnd);
+            document.removeEventListener('touchend', dragEnd);
+
+            if (dragGhost) dragGhost.remove();
+            dragGhost = null;
+            document.getElementById('stack-top').style.opacity = '1';
+
+            if (currentHoverZone) {
+                currentHoverZone.classList.remove('hover');
+                
+                const existing = currentHoverZone.dataset.fullName;
+                if(existing && existing !== "Lehrer") studentNames.push(existing);
+
+                currentHoverZone.dataset.fullName = draggedNameOriginal;
+                currentHoverZone.innerText = formatName(draggedNameOriginal);
+
+                studentNames = studentNames.filter(n => n !== draggedNameOriginal);
+                renderNames();
+                saveState();
+                currentHoverZone = null;
+            }
+        }
+
+        function handleZoneClick(ev) {
+            const fullName = ev.target.dataset.fullName;
+            if(fullName && fullName !== "Lehrer") {
+                studentNames.push(fullName);
+                ev.target.dataset.fullName = "";
+                ev.target.innerText = "";
+                renderNames();
+                saveState();
+            }
+        }
+
+        // ==========================================
+        // 3. PLAN-MANAGEMENT & SPEICHERN
+        // ==========================================
+        function saveState() {
+            if(!appData.plans[appData.activePlanId]) return;
+            const currentPlan = appData.plans[appData.activePlanId];
+            currentPlan.names = studentNames;
+            currentPlan.furniture = [];
+
+            canvasEl.querySelectorAll('.furniture').forEach(f => {
+                const typeClass = Array.from(f.classList).find(c => c !== 'furniture' && c !== 'desk' && c !== 'placeholder-item');
+                let seats = [];
+                f.querySelectorAll('.drop-zone').forEach(seat => seats.push(seat.dataset.fullName || ""));
+
+                currentPlan.furniture.push({
+                    id: f.id, type: typeClass,
+                    left: f.style.left, top: f.style.top,
+                    width: f.style.width, height: f.style.height,
+                    rotation: f.dataset.rotation || 0,
+                    seats: seats,
+                    customLabel: f.querySelector('.placeholder-text') ? f.querySelector('.placeholder-text').innerText : ""
+                });
+            });
+            localStorage.setItem('sitzplan_app_data', JSON.stringify(appData));
+        }
+
+        function loadAppData() {
+            const saved = localStorage.getItem('sitzplan_app_data');
+            if (saved) {
+                try { 
+                    const parsed = JSON.parse(saved);
+                    appData = { ...appData, ...parsed };
+                    appData.settings = { ...appData.settings, ...(parsed.settings || {}) };
+                } catch(e) {}
+            }
+            loadSettingsUI();
+            updatePlanSelectUI();
+            loadPlan(appData.activePlanId);
+        }
+
+        function updatePlanSelectUI() {
+            const select = document.getElementById('plan-select');
+            select.innerHTML = '';
+            for (let id in appData.plans) {
+                const opt = document.createElement('option');
+                opt.value = id; opt.innerText = appData.plans[id].name;
+                if (id === appData.activePlanId) opt.selected = true;
+                select.appendChild(opt);
+            }
+        }
+
+        function switchPlan() { saveState(); appData.activePlanId = document.getElementById('plan-select').value; loadPlan(appData.activePlanId); }
+        function createNewPlan() {
+            const name = prompt("Name des neuen Plans:");
+            if (!name) return;
+            saveState();
+            const newId = 'plan_' + Date.now();
+            appData.plans[newId] = { name: name, names: [], furniture: [] };
+            appData.activePlanId = newId;
+            updatePlanSelectUI(); loadPlan(newId); saveState();
+        }
+        function renameCurrentPlan() {
+            const name = prompt("Neuer Name:", appData.plans[appData.activePlanId].name);
+            if (name) { appData.plans[appData.activePlanId].name = name; updatePlanSelectUI(); saveState(); }
+        }
+        function deleteCurrentPlan() {
+            if(Object.keys(appData.plans).length <= 1) { alert("Du musst mindestens einen Plan behalten."); return; }
+            if(confirm("Möchtest du diesen Plan wirklich löschen?")) {
+                delete appData.plans[appData.activePlanId];
+                appData.activePlanId = Object.keys(appData.plans)[0];
+                updatePlanSelectUI(); loadPlan(appData.activePlanId); saveState(); closeSettings();
+            }
+        }
+
+        function loadPlan(planId) {
+            canvasEl.innerHTML = ''; furnitureIdCounter = 0;
+            const plan = appData.plans[planId];
+            studentNames = plan.names || [];
+            document.getElementById('name-input').value = studentNames.join('\n');
+            renderNames();
+
+            (plan.furniture || []).forEach(item => {
+                let numId = parseInt(item.id.replace('furn_', ''));
+                if (numId >= furnitureIdCounter) furnitureIdCounter = numId + 1;
+                createFurnitureElement(item.type, item.customLabel, item);
+            });
+            updateInputs(); resetView();
+        }
+
+        function exportToFile() {
+            saveState();
+            const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sitzplaene.json'; a.click();
+        }
+        function importFromFile(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try { appData = JSON.parse(e.target.result); updatePlanSelectUI(); loadPlan(appData.activePlanId); saveState(); closeSettings(); } 
+                catch (err) { alert("Fehler beim Lesen der Datei!"); }
+            };
+            reader.readAsText(file); event.target.value = '';
+        }
+
+        // ==========================================
+        // 4. LISTEN & RENDERING
+        // ==========================================
+        function importNamesFromText() {
+            studentNames = document.getElementById('name-input').value.split('\n').map(n => n.trim()).filter(n => n !== '');
+            renderNames(); saveState();
+        }
+
+        function importFromExcel(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1}); 
+                    let newNames = [];
+                    jsonData.forEach(row => { if (row[0] && typeof row[0] === 'string' && row[0].trim() !== '') newNames.push(row[0].trim()); });
+                    if(newNames.length > 0) {
+                        studentNames = newNames; document.getElementById('name-input').value = studentNames.join('\n');
+                        renderNames(); saveState(); alert(`${newNames.length} Namen importiert!`);
+                    }
+                } catch (err) { alert("Fehler bei Excel-Datei."); }
+            };
+            reader.readAsArrayBuffer(file); event.target.value = '';
+        }
+
+        function renderNames() {
+            const listContainer = document.getElementById('list-container');
+            listContainer.innerHTML = '';
+            
+            studentNames.forEach((name, index) => {
+                const div = document.createElement('div');
+                div.className = 'name-item';
+                div.innerText = formatName(name);
+                attachDragEvents(div, () => name, false);
+                listContainer.appendChild(div);
+            });
+
+            const stackTop = document.getElementById('stack-top');
+            const stackCount = document.getElementById('stack-count');
+            
+            const newStackTop = stackTop.cloneNode(true);
+            stackTop.parentNode.replaceChild(newStackTop, stackTop);
+
+            if (studentNames.length > 0) {
+                newStackTop.innerText = formatName(studentNames[0]);
+                newStackTop.style.cursor = 'grab';
+                attachDragEvents(newStackTop, () => studentNames[0], true);
+                stackCount.innerText = `${studentNames.length} übrig`;
+            } else {
+                newStackTop.innerText = "Leer";
+                newStackTop.style.cursor = 'default';
+                stackCount.innerText = `0 übrig`;
+            }
+        }
+
+        document.getElementById('toggle-sidebar').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+            document.getElementById('sidebar-title').style.display = document.getElementById('sidebar').classList.contains('collapsed') ? 'none' : 'block';
+        });
+
+        // ==========================================
+        // 5. ZOOM & PAN (Kamera)
+        // ==========================================
+        function updateTransform() {
+            canvasEl.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+            document.getElementById('zoom-level').innerText = Math.round(scale * 100) + '%';
+        }
+
+        function setZoom(amount) {
+            scale = Math.min(Math.max(0.4, scale + amount), 2.5);
+            updateTransform();
+        }
+
+        function resetView() { scale = 1; panX = 0; panY = 0; updateTransform(); }
+
+        roomEl.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(-e.deltaY * 0.001); }, {passive: false});
+
+        const startPan = (e) => {
+            if (e.target !== roomEl && e.target !== canvasEl) return;
+            e.preventDefault(); isPanning = true;
+        };
+        roomEl.addEventListener('mousedown', startPan);
+        roomEl.addEventListener('touchstart', startPan, {passive: false});
+
+        const doPan = (e) => {
+            if (!isPanning) return;
+            e.preventDefault();
+            const movementX = e.movementX || (e.touches[0].clientX - (doPan.lastX || e.touches[0].clientX));
+            const movementY = e.movementY || (e.touches[0].clientY - (doPan.lastY || e.touches[0].clientY));
+            
+            panX += movementX; panY += movementY;
+            updateTransform();
+
+            if(e.touches) { doPan.lastX = e.touches[0].clientX; doPan.lastY = e.touches[0].clientY; }
+        };
+        window.addEventListener('mousemove', doPan);
+        window.addEventListener('touchmove', doPan, {passive: false});
+
+        const endPan = () => { isPanning = false; doPan.lastX = null; doPan.lastY = null; };
+        window.addEventListener('mouseup', endPan);
+        window.addEventListener('touchend', endPan);
+
+        // ==========================================
+        // 6. MÖBEL GENERIERUNG & LOGIK
+        // ==========================================
+        function changeCount(type, amount) {
+            const input = document.getElementById('count-' + type);
+            let newVal = parseInt(input.value) + amount;
+            if(newVal < 0) newVal = 0;
+            input.value = newVal; syncRoom(type); saveState();
+        }
+
+        function syncRoom(type) {
+            const currentElements = canvasEl.querySelectorAll('.' + type);
+            const targetCount = parseInt(document.getElementById('count-' + type).value);
+            
+            if (targetCount > currentElements.length) {
+                for (let i = 0; i < (targetCount - currentElements.length); i++) createFurnitureElement(type);
+            } else if (targetCount < currentElements.length) {
+                for (let i = 0; i < (currentElements.length - targetCount); i++) {
+                    const el = currentElements[currentElements.length - 1 - i];
+                    el.querySelectorAll('.drop-zone').forEach(seat => {
+                        const name = seat.dataset.fullName;
+                        if(name && name !== "Lehrer") studentNames.push(name);
+                    });
+                    el.remove();
+                }
+                renderNames();
+            }
+        }
+
+        function updateInputs() {
+            ['desk-single', 'desk-double', 'teacher-desk', 'board'].forEach(type => {
+                const el = document.getElementById('count-' + type);
+                if(el) el.value = canvasEl.querySelectorAll('.' + type).length;
+            });
+        }
+
+        function addPlaceholder() {
+            const label = prompt("Beschriftung (z.B. Tür):", "Schrank");
+            if(label) { createFurnitureElement('placeholder', label); saveState(); }
+        }
+
+        function createFurnitureElement(typeClass, customLabel = "", savedData = null) {
+            const elem = document.createElement('div');
+            let baseClass = typeClass.includes('desk') ? 'desk' : (typeClass === 'placeholder' ? 'placeholder-item' : '');
+            elem.className = `furniture ${baseClass} ${typeClass}`;
+            
+            if (savedData) {
+                elem.id = savedData.id; elem.style.left = savedData.left; elem.style.top = savedData.top;
+                if(savedData.width) elem.style.width = savedData.width; if(savedData.height) elem.style.height = savedData.height;
+                elem.dataset.rotation = savedData.rotation; elem.style.transform = `rotate(${savedData.rotation}deg)`;
+            } else {
+                elem.id = 'furn_' + furnitureIdCounter++; elem.dataset.rotation = 0;
+                elem.style.left = (-panX/scale + roomEl.clientWidth/2 / scale - 40) + 'px';
+                elem.style.top = (-panY/scale + roomEl.clientHeight/2 / scale - 40) + 'px';
+            }
+
+            const btnDel = document.createElement('button');
+            btnDel.className = 'control-icon delete-btn'; btnDel.innerHTML = '&#10005;';
+            btnDel.onclick = () => { 
+                elem.querySelectorAll('.drop-zone').forEach(seat => {
+                    if(seat.dataset.fullName && seat.dataset.fullName !== "Lehrer") studentNames.push(seat.dataset.fullName);
+                });
+                renderNames(); elem.remove(); updateInputs(); saveState();
+            };
+            elem.appendChild(btnDel);
+
+            const handleRot = document.createElement('div');
+            handleRot.className = 'control-icon rotate-handle'; handleRot.innerHTML = '&#8635;';
+            elem.appendChild(handleRot);
+
+            if(typeClass === 'board') {
+                const boardText = document.createElement('div'); boardText.className = 'board-text'; boardText.innerText = "Whiteboard"; elem.appendChild(boardText);
+            } else if (typeClass === 'placeholder') {
+                const phText = document.createElement('div'); phText.className = 'placeholder-text'; phText.innerText = savedData ? savedData.customLabel : customLabel; elem.appendChild(phText);
+            } else {
+                const seatsContainer = document.createElement('div'); seatsContainer.className = 'seats-container';
+                let seatCount = typeClass === 'desk-double' ? 2 : 1;
+                
+                for(let i=0; i<seatCount; i++) {
+                    const seat = document.createElement('div'); seat.className = 'drop-zone';
+                    
+                    if(savedData && savedData.seats && savedData.seats[i]) {
+                        seat.dataset.fullName = savedData.seats[i];
+                        seat.innerText = formatName(savedData.seats[i]);
+                    } else if(typeClass === 'teacher-desk') {
+                        seat.dataset.fullName = "Lehrer";
+                        seat.innerText = "Lehrer";
+                    }
+                    
+                    seat.onclick = handleZoneClick;
+                    seatsContainer.appendChild(seat);
+                }
+                elem.appendChild(seatsContainer);
+            }
+            canvasEl.appendChild(elem);
+            makeMovable(elem);
+        }
+
+        // ==========================================
+        // 7. BEWEGUNG & ROTATION
+        // ==========================================
+        function getVisualBounds(el, offsetL, offsetT) {
+            let w = el.offsetWidth, h = el.offsetHeight;
+            let cx = offsetL + w / 2, cy = offsetT + h / 2;
+            let rot = (parseInt(el.dataset.rotation) || 0) % 180;
+            if (Math.abs(rot) === 90) return { left: cx - h/2, right: cx + h/2, top: cy - w/2, bottom: cy + w/2, cx: cx, cy: cy };
+            return { left: cx - w/2, right: cx + w/2, top: cy - h/2, bottom: cy + h/2, cx: cx, cy: cy };
+        }
+
+        function makeMovable(element) {
+            let isDraggingObj = false, isRotating = false;
+            let pos3 = 0, pos4 = 0, cx, cy, startAngle, startRot, currentX = 0, currentY = 0; 
+
+            const startAction = (e) => {
+                if (e.target.classList.contains('delete-btn')) return;
+                
+                const point = e.touches ? e.touches[0] : e;
+                const rect = element.getBoundingClientRect();
+                const offsetX = (point.clientX - rect.left) / scale;
+                const offsetY = (point.clientY - rect.top) / scale;
+                if (offsetX > element.offsetWidth - 25 && offsetY > element.offsetHeight - 25) return;
+
+                e.preventDefault(); 
+
+                if (e.target.classList.contains('rotate-handle')) {
+                    isRotating = true;
+                    cx = rect.left + rect.width / 2; cy = rect.top + rect.height / 2;
+                    startAngle = Math.atan2(point.clientY - cy, point.clientX - cx) * 180 / Math.PI;
+                    startRot = parseFloat(element.dataset.rotation) || 0;
+                    
+                    document.addEventListener('mousemove', rotateEl);
+                    document.addEventListener('touchmove', rotateEl, {passive: false});
+                    document.addEventListener('mouseup', stopAction);
+                    document.addEventListener('touchend', stopAction);
+                    return;
+                }
+
+                isDraggingObj = true;
+                pos3 = point.clientX; pos4 = point.clientY;
+                currentX = element.offsetLeft; currentY = element.offsetTop;
+                
+                document.addEventListener('mousemove', dragEl);
+                document.addEventListener('touchmove', dragEl, {passive: false});
+                document.addEventListener('mouseup', stopAction);
+                document.addEventListener('touchend', stopAction);
+            };
+
+            element.addEventListener('mousedown', startAction);
+            element.addEventListener('touchstart', startAction, {passive: false});
+
+            function dragEl(e) {
+                if (!isDraggingObj) return;
+                e.preventDefault();
+                const point = e.touches ? e.touches[0] : e;
+                
+                const pos1 = (pos3 - point.clientX) / scale;
+                const pos2 = (pos4 - point.clientY) / scale;
+                pos3 = point.clientX; pos4 = point.clientY;
+
+                currentX -= pos1; currentY -= pos2;
+                let renderX = currentX, renderY = currentY;
+
+                if (appData.settings.snap) {
+                    let snapTol = 8 / scale; 
+                    let v1 = getVisualBounds(element, renderX, renderY);
+                    let minDx = snapTol + 1, minDy = snapTol + 1;
+
+                    for (let other of canvasEl.querySelectorAll('.furniture')) {
+                        if (other === element) continue;
+                        let v2 = getVisualBounds(other, other.offsetLeft, other.offsetTop);
+                        if (Math.hypot(v1.cx - v2.cx, v1.cy - v2.cy) > 300) continue; 
+
+                        for(let dx of [v2.right - v1.left, v2.left - v1.right, v2.left - v1.left, v2.right - v1.right, v2.cx - v1.cx]) { 
+                            if(Math.abs(dx) < Math.abs(minDx)) minDx = dx; 
+                        }
+                        for(let dy of [v2.bottom - v1.top, v2.top - v1.bottom, v2.top - v1.top, v2.bottom - v1.bottom, v2.cy - v1.cy]) { 
+                            if(Math.abs(dy) < Math.abs(minDy)) minDy = dy; 
+                        }
+                    }
+                    if (Math.abs(minDx) <= snapTol) renderX += minDx;
+                    if (Math.abs(minDy) <= snapTol) renderY += minDy;
+                }
+                element.style.left = renderX + "px"; element.style.top = renderY + "px";
+            }
+
+            function rotateEl(e) {
+                if (!isRotating) return;
+                e.preventDefault();
+                const point = e.touches ? e.touches[0] : e;
+                let newRot = startRot + (Math.atan2(point.clientY - cy, point.clientX - cx) * 180 / Math.PI - startAngle);
+                let snappedRot = Math.round(newRot / 90) * 90;
+                if (Math.abs(newRot - snappedRot) < 15) newRot = snappedRot;
+                element.style.transform = `rotate(${newRot}deg)`;
+                element.dataset.rotation = newRot;
+            }
+
+            function stopAction() {
+                isDraggingObj = false; isRotating = false;
+                document.removeEventListener('mousemove', dragEl);
+                document.removeEventListener('touchmove', dragEl);
+                document.removeEventListener('mousemove', rotateEl);
+                document.removeEventListener('touchmove', rotateEl);
+                document.removeEventListener('mouseup', stopAction);
+                document.removeEventListener('touchend', stopAction);
+                saveState();
+            }
+        }
+
+        // Init
+        window.onload = function() {
+            window.addEventListener('mouseup', (e) => { if(e.target.closest('.furniture')) setTimeout(saveState, 50); });
+            window.addEventListener('touchend', (e) => { if(e.target.closest('.furniture')) setTimeout(saveState, 50); });
+            loadAppData();
+            updateTransform();
+            
+            document.getElementById('settings-modal').addEventListener('click', (e) => {
+                if(e.target === document.getElementById('settings-modal')) closeSettings();
+            });
+        };
+    </script>
+</body>
+</html>
