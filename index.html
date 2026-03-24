@@ -3,96 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SitzplanPro</title>
+    <title>Sitzplan Creator - V15 (Cross-Device Sync)</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         /* CSS Variablen für das dynamische Design */
         :root {
-            /* Standard-Farben (Auszug) */
-            --bg-body: #f1f5f9;
-            --bg-ui: #ffffff;
-            --border-color: #e2e8f0;
-            --primary: #3b82f6;
-            --primary-hover: #2563eb;
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --room-bg: #f8fafc;
-            --desk-bg: #fef08a;
-            --desk-border: #ca8a04;
-            --board-bg: #ffffff;
-            --board-border: #cbd5e1;
-            --global-font-size: 13px;
-            
-            --text-title: var(--text-main);
-            --dz-color: var(--text-main); /* Textfarbe in Dropzone */
+            --bg-body: #f1f5f9; --bg-ui: #ffffff; --border-color: #e2e8f0;
+            --primary: #3b82f6; --primary-hover: #2563eb;
+            --text-main: #1e293b; --text-muted: #64748b;
+            --room-bg: #f8fafc; --desk-bg: #fef08a; --desk-border: #ca8a04;
+            --board-bg: #ffffff; --board-border: #cbd5e1;
+            --global-font-size: 13px; --text-title: var(--text-main); --dz-color: var(--text-main); 
         }
 
         /* --- RSG-VERSION FARBOVERRIDE --- */
         body.rsg-version {
-            /* Grundlegende UI-Farben */
-            --bg-body: #ffffff; 
-            --bg-ui: #f0f4f8; 
-            --border-color: #0a3d66; /* RSG Dunkelblau */
-            
-            /* Text- und Akzentfarben */
-            --primary: #0a3d66; 
-            --primary-hover: #072e4d;
-            --text-main: #0a3d66; 
-            --text-title: #0a3d66; 
-            --text-muted: #3b9ce0; /* RSG Hellblau */
-
-            /* Schülertische (Hellblau) */
-            --desk-bg: #e0f2fe; 
-            --desk-border: #3b9ce0; 
-            --dz-color: #0a3d66; 
-            
-            /* Whiteboard */
+            --bg-body: #ffffff; --bg-ui: #f0f4f8; --border-color: #0a3d66; 
+            --primary: #0a3d66; --primary-hover: #072e4d;
+            --text-main: #0a3d66; --text-title: #0a3d66; --text-muted: #3b9ce0; 
+            --desk-bg: #e0f2fe; --desk-border: #3b9ce0; --dz-color: #0a3d66; 
             --board-border: #0a3d66; 
         }
-
-        /* Lehrerpult in der RSG-Version (Rot) */
-        body.rsg-version .teacher-desk {
-            background: #fee2e2 !important;
-            border-color: #cc1a1a !important;
-        }
-        body.rsg-version .teacher-desk .drop-zone {
-            color: #cc1a1a !important;
-        }
+        body.rsg-version .teacher-desk { background: #fee2e2 !important; border-color: #cc1a1a !important; }
+        body.rsg-version .teacher-desk .drop-zone { color: #cc1a1a !important; }
 
         * { box-sizing: border-box; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; user-select: none; }
-        
         body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background-color: var(--room-bg); overflow: hidden; color: var(--text-main); font-size: var(--global-font-size); }
-        input, textarea, button { font-size: inherit; user-select: auto; }
+        input, textarea, button, select { font-size: inherit; user-select: auto; }
+
+        /* --- AUTH OVERLAY --- */
+        #auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-body); z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+        .auth-box { background: var(--bg-ui); padding: 30px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); width: 350px; text-align: center; border: 1px solid var(--border-color); }
+        .auth-input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid var(--border-color); border-radius: 6px; font-size: 16px; text-align: center; background: var(--bg-body); }
+        .auth-input:focus { outline: 2px solid var(--primary); }
 
         /* --- Top Bar --- */
-        #top-bar { background: var(--bg-ui); padding: 10px 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); z-index: 200; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
-        .logo-area { display: flex; align-items: center; }
+        #top-bar { background: var(--bg-ui); padding: 8px 15px; display: flex; align-items: center; gap: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); z-index: 200; border-bottom: 1px solid var(--border-color); flex-shrink: 0; overflow-x: auto;}
+        .logo-area { display: flex; align-items: center; margin-right: 10px; }
         .logo { font-weight: 800; font-size: 1.2em; letter-spacing: -0.5px; color: var(--text-title); text-decoration: none;}
-        .top-btn { background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-weight: 500; }
+        
+        .nav-group { display: flex; align-items: center; gap: 5px; border-right: 1px solid var(--border-color); padding-right: 15px; }
+        .nav-group:last-child { border-right: none; }
+        .nav-label { font-size: 0.9em; color: var(--text-muted); font-weight: bold; }
+        select.nav-select { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); font-weight: bold; outline: none; color: var(--text-main); max-width: 120px;}
+        .top-btn { background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-weight: bold; }
         .top-btn:hover { background: #e2e8f0; }
-        #plan-select { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); font-weight: bold; outline: none; }
+        .top-btn.danger { color: #ef4444; }
         
         .zoom-controls { display: flex; align-items: center; gap: 5px; margin-left: auto; background: var(--bg-body); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color); }
         .zoom-btn { background: none; border: none; cursor: pointer; padding: 2px 10px; font-weight: bold; font-size: 1.2em; color: var(--text-muted); }
         .zoom-btn:hover { color: var(--primary); }
-        
         .icon-btn { background: none; border: none; font-size: 1.4em; cursor: pointer; color: var(--text-muted); transition: color 0.2s; margin-left: 10px; display: flex; align-items: center; justify-content: center; }
         .icon-btn:hover { color: var(--text-main); transform: rotate(45deg); }
 
         /* --- Main Area & Room --- */
         #main-area { display: flex; flex: 1; overflow: hidden; position: relative; }
-        
         #room { flex: 1; position: relative; background-color: var(--room-bg); margin: 15px; border-radius: 12px; overflow: hidden; cursor: grab; background-image: radial-gradient(var(--border-color) 1px, transparent 1px); background-size: 25px 25px; box-shadow: inset 0 0 20px rgba(0,0,0,0.02); border: 1px solid var(--border-color); }
         #room:active { cursor: grabbing; }
         #canvas { position: absolute; width: 5000px; height: 5000px; transform-origin: top left; pointer-events: none; }
         .furniture { pointer-events: auto; }
+
+        #print-header { display: none; position: absolute; top: 20px; left: 20px; z-index: 10; font-family: sans-serif; }
+        #print-header h1 { font-size: 24px; color: #000; margin: 0 0 5px 0; }
+        #print-header h2 { font-size: 16px; color: #555; margin: 0; font-weight: normal; }
 
         /* --- Seitenleiste --- */
         #sidebar { width: 260px; background: var(--bg-ui); border-left: 1px solid var(--border-color); transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; z-index: 100; box-shadow: -4px 0 15px rgba(0,0,0,0.03); flex-shrink: 0; }
         #sidebar.collapsed { width: 80px; }
         .sidebar-header { padding: 12px 15px; background: var(--bg-body); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color);}
         #toggle-sidebar { cursor: pointer; border: none; background: var(--bg-ui); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        #name-list-view, #name-stack-view { padding: 15px; overflow-y: auto; flex: 1; }
+        #name-list-view, #name-stack-view { padding: 15px; overflow-y: auto; flex: 1; display: flex; flex-direction: column;}
         #sidebar.collapsed #name-list-view { display: none; }
         #sidebar:not(.collapsed) #name-stack-view { display: none; }
         
@@ -116,7 +97,6 @@
         .furniture { position: absolute; border-radius: 6px; display: flex; flex-direction: column; resize: both; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); cursor: move; transform-origin: 50% 50%; min-width: 60px; min-height: 40px; }
         .furniture .control-icon { opacity: 0; transition: opacity 0.2s ease; position: absolute; z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white; border: none; font-size: 12px; }
         .furniture:hover .control-icon { opacity: 1; }
-        
         @media (hover: none) { .furniture .control-icon { opacity: 0.8; } }
 
         .delete-btn { top: -6px; right: -6px; width: 24px; height: 24px; background: #ef4444; cursor: pointer; font-weight: bold; }
@@ -130,33 +110,74 @@
         .board-text, .placeholder-text { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; pointer-events: none; text-align: center; padding: 4px; word-break: break-word;}
         .placeholder-item { background: transparent; border: 2px dashed var(--text-muted); color: var(--text-muted); width: 100px; height: 100px; font-weight: 600; }
 
-        /* Drop-Zones */
         .seats-container { display: flex; flex: 1; width: 100%; height: 100%; pointer-events: none; }
         .drop-zone { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; word-break: break-word; padding: 2px; border-right: 1px dashed rgba(0,0,0,0.15); pointer-events: auto; color: var(--dz-color); }
         .drop-zone:last-child { border-right: none; }
         .drop-zone.hover { background-color: rgba(255, 255, 255, 0.6); }
 
-        /* --- Settings Modal --- */
-        #settings-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
-        .modal-content { background: var(--bg-ui); padding: 25px; border-radius: 12px; width: 350px; max-width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; }
+        /* --- Settings Modals --- */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
+        .modal-content { background: var(--bg-ui); padding: 25px; border-radius: 12px; width: 380px; max-width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 12px; max-height: 90vh; overflow-y: auto;}
         .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; font-weight: bold; font-size: 1.2em; }
         .modal-close { cursor: pointer; font-size: 1.5em; color: var(--text-muted); line-height: 1; }
         .setting-row { display: flex; justify-content: space-between; align-items: center; }
+        .setting-row input[type="text"] { padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; }
         .setting-row input[type="color"] { border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; padding: 0; }
         
         #drag-ghost { position: fixed; pointer-events: none; z-index: 9999; opacity: 0.9; transform: translate(-50%, -50%); background: var(--primary); color: white; padding: 10px; border-radius: 8px; font-weight: bold; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+
+        .merge-class-block { border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; margin-bottom: 8px; background: var(--bg-body); }
+        .merge-class-header { font-weight: bold; display: flex; align-items: center; gap: 8px; }
+        .merge-class-header input { width: 16px; height: 16px; cursor: pointer; }
+        .merge-plans-list { margin-left: 24px; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 0.95em; }
+        .merge-plans-list label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+        @media print {
+            body { background: white !important; overflow: visible; height: auto; }
+            #top-bar, #sidebar, #toolbar, .modal-overlay, .zoom-controls, #auth-overlay { display: none !important; }
+            #main-area { margin: 0; padding: 0; overflow: visible; }
+            #room { margin: 0; border: none; box-shadow: none; background: white !important; background-image: none !important; }
+            #canvas { transform: scale(1) translate(0,0) !important; position: relative; }
+            .control-icon, .delete-btn, .rotate-handle { display: none !important; }
+            .drop-zone { border-color: #000 !important; }
+            .furniture { box-shadow: none !important; border: 1px solid #000 !important; }
+            #print-header { display: block !important; }
+        }
     </style>
 </head>
 <body>
 
+    <div id="auth-overlay">
+        <div class="auth-box">
+            <h2 id="auth-title" style="margin-bottom: 5px; color: var(--text-main);">SitzplanPro Setup</h2>
+            <p id="auth-desc" style="color: var(--text-muted); font-size: 13px;">Legen Sie ein Master-Passwort fest, um Ihre Schülerdaten ab sofort zu verschlüsseln.</p>
+            <input type="password" id="auth-pwd" class="auth-input" placeholder="Ihr Passwort..." onkeypress="if(event.key==='Enter') submitAuth()">
+            <button class="action-btn" style="width: 100%; padding: 12px; font-size: 15px;" onclick="submitAuth()" id="auth-btn">Datenbankschutz aktivieren</button>
+            <p style="color: #ef4444; font-size: 11px; margin-top: 15px; font-weight: bold;">Achtung: Wenn Sie dieses Passwort vergessen, sind Ihre Pläne unwiderruflich verloren!</p>
+        </div>
+    </div>
+
     <div id="top-bar">
         <div class="logo-area">
-            <img id="rsg-logo" src="logo.png" alt="RSG Logo" style="display: none; height: 32px; margin-right: 12px; transition: opacity 0.3s; object-fit: contain;">
+            <img id="rsg-logo" src="logo.png" alt="RSG Logo" style="display: none; height: 28px; margin-right: 12px; transition: opacity 0.3s; object-fit: contain;">
             <span id="top-title" class="logo">SitzplanPro</span>
         </div>
-        <select id="plan-select" onchange="switchPlan()"></select>
-        <button class="top-btn" onclick="createNewPlan()">+ Neu</button>
-        <button class="top-btn" onclick="renameCurrentPlan()">Umbenennen</button>
+        
+        <div class="nav-group">
+            <span class="nav-label">Klasse:</span>
+            <select id="class-select" class="nav-select" onchange="switchClass()"></select>
+            <button class="top-btn" onclick="createNewClass()" title="Neue Klasse">+</button>
+            <button class="top-btn" onclick="renameCurrentClass()" title="Klasse umbenennen">✎</button>
+            <button class="top-btn danger" onclick="deleteCurrentClass()" title="Klasse löschen">×</button>
+        </div>
+
+        <div class="nav-group">
+            <span class="nav-label">Raum:</span>
+            <select id="plan-select" class="nav-select" onchange="switchPlan()"></select>
+            <button class="top-btn" onclick="createNewPlan()" title="Neuer Raum">+</button>
+            <button class="top-btn" onclick="renameCurrentPlan()" title="Raum umbenennen">✎</button>
+            <button class="top-btn danger" onclick="deleteCurrentPlan()" title="Raum löschen">×</button>
+        </div>
 
         <div class="zoom-controls">
             <button class="zoom-btn" onclick="setZoom(-0.1)">-</button>
@@ -172,23 +193,30 @@
 
     <div id="main-area">
         <div id="room">
+            <div id="print-header">
+                <h1 id="print-title">Klasse - Raum</h1>
+                <h2 id="print-subtitle">Schuljahr | Lehrkraft</h2>
+            </div>
             <div id="canvas"></div>
         </div>
 
         <div id="sidebar">
             <div class="sidebar-header">
-                <span id="sidebar-title" style="font-weight: bold;">Klasse</span>
+                <span id="sidebar-title" style="font-weight: bold;">Unverteilt</span>
                 <button id="toggle-sidebar">⇄</button>
             </div>
             
             <div id="name-list-view">
-                <textarea id="name-input" rows="4" style="width: 100%; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 6px; padding: 5px;" placeholder="Namen eingeben..."></textarea>
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">Klassenliste bearbeiten:</p>
+                <textarea id="name-input" style="flex: 1; width: 100%; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 6px; padding: 5px; resize: none;" placeholder="Namen eingeben..."></textarea>
                 <div style="display: flex; gap: 5px; margin-bottom: 15px;">
-                    <button class="action-btn" onclick="importNamesFromText()" style="flex: 1; padding: 6px;">Laden</button>
-                    <button class="action-btn" onclick="document.getElementById('excel-input').click()" style="flex: 1; padding: 6px; background: #0f766e;">.xlsx</button>
+                    <button class="action-btn" onclick="updateMasterList()" style="flex: 1; padding: 6px;">Übernehmen</button>
+                    <button class="action-btn" onclick="document.getElementById('excel-input').click()" style="flex: 1; padding: 6px; background: #0f766e;" title="Ersetzt Liste durch Excel-Spalte">.xlsx</button>
                     <input type="file" id="excel-input" style="display: none;" accept=".xlsx, .xls" onchange="importFromExcel(event)">
                 </div>
-                <div id="list-container"></div>
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin-bottom: 10px;">
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">Noch ohne Platz (A-Z):</p>
+                <div id="list-container" style="flex: 1; overflow-y: auto;"></div>
             </div>
 
             <div id="name-stack-view">
@@ -236,19 +264,27 @@
         </div>
     </div>
 
-    <div id="settings-modal">
+    <div id="settings-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
-                Einstellungen
+                Einstellungen & Daten
                 <div class="modal-close" onclick="closeSettings()">×</div>
             </div>
             
             <div class="setting-row">
-                <label>RSG-Version aktivieren</label>
-                <input type="checkbox" id="setting-rsg" onchange="applySettings()">
+                <label>Lehrerkürzel</label>
+                <input type="text" id="setting-teacher" style="width: 80px;" onchange="applySettings()" placeholder="ABC">
+            </div>
+            <div class="setting-row">
+                <label>Schuljahr</label>
+                <input type="text" id="setting-year" style="width: 80px;" onchange="applySettings()" placeholder="25/26">
             </div>
             <hr style="border: 0; border-top: 1px solid var(--border-color);">
 
+            <div class="setting-row">
+                <label>RSG-Version (Farben/Logo)</label>
+                <input type="checkbox" id="setting-rsg" onchange="applySettings()">
+            </div>
             <div class="setting-row">
                 <label>Nachnamen abkürzen</label>
                 <input type="checkbox" id="setting-short-names" onchange="applySettings()">
@@ -257,6 +293,7 @@
                 <label>Sanftes Einrasten</label>
                 <input type="checkbox" id="setting-snap" checked onchange="applySettings()">
             </div>
+            
             <hr style="border: 0; border-top: 1px solid var(--border-color);">
             <div class="setting-row">
                 <label>Schriftgröße</label>
@@ -270,41 +307,337 @@
                 <label>Farbe: Hintergrund</label>
                 <input type="color" id="setting-color-bg" value="#f8fafc" onchange="applySettings()">
             </div>
+            
             <hr style="border: 0; border-top: 1px solid var(--border-color);">
-            <div style="display: flex; gap: 10px; flex-direction: column;">
-                <button class="action-btn" onclick="exportToFile()" style="width: 100%; background: var(--text-main);">Datenbank Speichern (.json)</button>
-                <button class="action-btn" onclick="document.getElementById('file-input').click()" style="width: 100%; background: var(--text-muted);">Datenbank Laden (.json)</button>
-                <input type="file" id="file-input" style="display: none;" accept=".json" onchange="importFromFile(event)">
-                <button class="action-btn" onclick="deleteCurrentPlan()" style="width: 100%; background: #ef4444; margin-top: 10px;">Aktuellen Plan Löschen</button>
+            <div style="display: flex; gap: 8px; flex-direction: column;">
+                <button class="action-btn" onclick="printPlan()" style="width: 100%; background: #10b981;">🖨️ Aktuellen Plan als PDF drucken</button>
+                <button class="action-btn" onclick="exportToFile()" style="width: 100%; background: var(--text-main);" title="Speichert direkt in deiner Cloud/PC">💾 Datei Speichern (PC/Mac)</button>
+                
+                <div style="display: flex; gap: 5px;">
+                    <button class="action-btn" onclick="triggerImport('merge')" style="flex: 1; background: #3b82f6; font-size: 11px;">📂 Alte Daten zusammenführen</button>
+                    <button class="action-btn" onclick="triggerImport('full')" style="flex: 1; background: #ef4444; font-size: 11px;" title="Überschreibt die komplette Datenbank!">⚠️ Datei Öffnen (PC/Mac)</button>
+                </div>
+                <input type="file" id="fallback-input-merge" style="display: none;" accept=".json" onchange="handleMergeFileLegacy(event)">
+                <input type="file" id="fallback-input-full" style="display: none;" accept=".json" onchange="importFromFileFullLegacy(event)">
             </div>
+        </div>
+    </div>
+
+    <div id="merge-modal" class="modal-overlay" style="z-index: 1050;">
+        <div class="modal-content">
+            <div class="modal-header">
+                Klassen & Räume importieren
+                <div class="modal-close" onclick="closeMergeModal()">×</div>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted);">Wähle gezielt aus, was du in dein aktuelles Schuljahr übernehmen möchtest. Ungewählte Räume werden ignoriert.</p>
+            
+            <div id="merge-class-list" style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 5px;">
+                </div>
+
+            <button class="action-btn" onclick="executeMerge()" style="width: 100%; margin-top: 10px;">Ausgewählte Daten importieren</button>
         </div>
     </div>
 
     <script>
         // ==========================================
-        // 1. STATE & SETTINGS
+        // 1. KRYPTO & DATENSTRUKTUR
         // ==========================================
+        let appPassword = null;
+        const STORAGE_KEY = 'sitzplan_v14_crypto'; // Wird weiter genutzt
+
         let appData = {
-            activePlanId: 'plan_1',
-            settings: { 
-                shortNames: false, snap: true, fontSize: 13, 
-                colorDesk: '#fef08a', colorBg: '#f8fafc',
-                rsg: false
-            },
-            plans: { 'plan_1': { name: 'Mein erster Plan', names: [], furniture: [] } }
+            settings: { shortNames: false, snap: true, fontSize: 13, colorDesk: '#fef08a', colorBg: '#f8fafc', rsg: false, teacher: '', year: '' },
+            activeClassId: 'c1', activePlanId: 'p1',
+            classes: {
+                'c1': { name: 'Klasse 5A', masterNames: ["Anna", "Ben", "Clara", "David"], plans: { 'p1': { name: 'Raum 150', furniture: [] } } }
+            }
         };
-        let studentNames = []; 
+        
         let furnitureIdCounter = 0;
         let scale = 1, panX = 0, panY = 0, isPanning = false;
+        let tempMergeData = null; 
 
         const roomEl = document.getElementById('room');
         const canvasEl = document.getElementById('canvas');
 
-        // Modal Logic
+        // Initialisierung & Auth
+        window.onload = function() {
+            window.addEventListener('mouseup', (e) => { if(e.target.closest('.furniture')) setTimeout(saveState, 50); });
+            window.addEventListener('touchend', (e) => { if(e.target.closest('.furniture')) setTimeout(saveState, 50); });
+            
+            document.querySelectorAll('.modal-overlay').forEach(modal => {
+                modal.addEventListener('click', (e) => { if(e.target === modal) { closeSettings(); closeMergeModal(); } });
+            });
+
+            checkAuth();
+        };
+
+        function checkAuth() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            const legacy13 = localStorage.getItem('sitzplan_v13_crypto'); 
+            
+            const overlay = document.getElementById('auth-overlay');
+            const title = document.getElementById('auth-title');
+            const desc = document.getElementById('auth-desc');
+            const btn = document.getElementById('auth-btn');
+
+            if(saved || legacy13) {
+                title.innerText = "Datenbank gesperrt";
+                desc.innerText = "Bitte geben Sie Ihr Master-Passwort ein, um die Daten zu entschlüsseln.";
+                btn.innerText = "Datenbank entsperren";
+            } else {
+                title.innerText = "Willkommen bei SitzplanPro";
+                desc.innerText = "Legen Sie ein Master-Passwort fest, um Ihre Schülerdaten ab sofort zu verschlüsseln.";
+                btn.innerText = "Datenbankschutz aktivieren";
+            }
+        }
+
+        function submitAuth() {
+            const pwd = document.getElementById('auth-pwd').value;
+            if(!pwd) return alert("Bitte ein Passwort eingeben!");
+            
+            const saved = localStorage.getItem(STORAGE_KEY);
+            const legacy13 = localStorage.getItem('sitzplan_v13_crypto');
+
+            if(saved || legacy13) {
+                try {
+                    const dataToDecrypt = saved || legacy13;
+                    const parsed = JSON.parse(dataToDecrypt);
+                    const bytes = CryptoJS.AES.decrypt(parsed.data, pwd);
+                    const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
+                    if(!decryptedStr) throw new Error("Wrong password");
+                    
+                    const decryptedObj = JSON.parse(decryptedStr);
+                    appPassword = pwd;
+                    document.getElementById('auth-overlay').style.display = 'none';
+                    if(legacy13) {
+                        localStorage.removeItem('sitzplan_v13_crypto');
+                        saveState(); 
+                    }
+                    loadAppData(decryptedObj);
+                } catch(e) { alert("Falsches Passwort!"); }
+            } else {
+                appPassword = pwd;
+                document.getElementById('auth-overlay').style.display = 'none';
+                saveState(); 
+                loadAppData(null);
+            }
+        }
+
+        // ==========================================
+        // 2. LADEN / SPEICHERN (Verschlüsselt)
+        // ==========================================
+        function saveState() {
+            if(!appPassword || !appData.classes[appData.activeClassId]) return;
+            
+            const currentPlan = appData.classes[appData.activeClassId].plans[appData.activePlanId];
+            if(currentPlan) {
+                currentPlan.furniture = [];
+                canvasEl.querySelectorAll('.furniture').forEach(f => {
+                    const typeClass = Array.from(f.classList).find(c => c !== 'furniture' && c !== 'desk' && c !== 'placeholder-item');
+                    let seats = [];
+                    f.querySelectorAll('.drop-zone').forEach(seat => seats.push(seat.dataset.fullName || ""));
+                    currentPlan.furniture.push({
+                        id: f.id, type: typeClass, left: f.style.left, top: f.style.top,
+                        width: f.style.width, height: f.style.height, rotation: f.dataset.rotation || 0,
+                        seats: seats, customLabel: f.querySelector('.placeholder-text') ? f.querySelector('.placeholder-text').innerText : ""
+                    });
+                });
+            }
+
+            const payload = JSON.stringify(appData);
+            const encrypted = CryptoJS.AES.encrypt(payload, appPassword).toString();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 15, data: encrypted }));
+        }
+
+        function loadAppData(decryptedObj) {
+            if (decryptedObj) appData = { ...appData, ...decryptedObj };
+            
+            if(!appData.classes) appData.classes = { 'c1': { name: 'Klasse 5A', masterNames: [], plans: { 'p1': { name: 'Raum 1', furniture: [] } } } };
+            if(!appData.activeClassId || !appData.classes[appData.activeClassId]) appData.activeClassId = Object.keys(appData.classes)[0];
+            if(!appData.activePlanId || !appData.classes[appData.activeClassId].plans[appData.activePlanId]) appData.activePlanId = Object.keys(appData.classes[appData.activeClassId].plans)[0];
+
+            // Hier wird alles visuell aus den Daten in die UI geladen
+            loadSettingsUI(); 
+            updateNavUI(); 
+            loadPlan();
+        }
+
+        // ==========================================
+        // 3. MODERN FILE SYSTEM ACCESS API (PC/Mac Sync)
+        // ==========================================
+        async function exportToFile() {
+            saveState();
+            let year = (appData.settings.year || "").replace(/[^a-zA-Z0-9]/g, '');
+            let teacher = (appData.settings.teacher || "").replace(/[^a-zA-Z0-9]/g, '');
+            let prefix = [year, teacher].filter(Boolean).join('_');
+            let fileName = prefix ? `${prefix}_DB_Verschluesselt.json` : 'Sitzplaene_DB_Verschluesselt.json';
+            
+            const dataToExport = localStorage.getItem(STORAGE_KEY);
+
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: fileName,
+                        types: [{ description: 'Sitzplan Datenbank', accept: {'application/json': ['.json']} }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(dataToExport);
+                    await writable.close();
+                    alert("Datei wurde direkt überschrieben/gespeichert!");
+                    return;
+                } catch (err) {
+                    if (err.name !== 'AbortError') console.error(err);
+                    return; 
+                }
+            }
+
+            // Fallback iPad
+            const blob = new Blob([dataToExport], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; a.click();
+        }
+
+        function triggerImport(type) {
+            if (window.showOpenFilePicker) {
+                importWithModernAPI(type);
+            } else {
+                if (type === 'full') document.getElementById('fallback-input-full').click();
+                if (type === 'merge') document.getElementById('fallback-input-merge').click();
+            }
+        }
+
+        async function importWithModernAPI(type) {
+            try {
+                const [handle] = await window.showOpenFilePicker({
+                    types: [{ description: 'Sitzplan Datenbank', accept: {'application/json': ['.json']} }]
+                });
+                const file = await handle.getFile();
+                const text = await file.text();
+                
+                if (type === 'full') processFullImportData(text);
+                if (type === 'merge') processMergeImportData(text);
+                
+            } catch (err) {
+                if (err.name !== 'AbortError') alert("Fehler beim Öffnen der Datei.");
+            }
+        }
+
+        // ==========================================
+        // 4. IMPORT LOGIK (Full & Merge)
+        // ==========================================
+        function parseImportedFile(jsonString, onSuccess) {
+            try {
+                const parsed = JSON.parse(jsonString);
+                if((parsed.version >= 13) && parsed.data) {
+                    const pwd = prompt("Bitte das Passwort für DIESE externe Datei eingeben:");
+                    if(pwd === null) return;
+                    const bytes = CryptoJS.AES.decrypt(parsed.data, pwd);
+                    const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
+                    if(!decryptedStr) throw new Error("Wrong password");
+                    onSuccess(JSON.parse(decryptedStr), pwd);
+                } else if (parsed.classes) {
+                    onSuccess(parsed, appPassword); 
+                } else {
+                    alert("Ungültiges Dateiformat!");
+                }
+            } catch(e) { alert("Fehler beim Lesen oder falsches Passwort!"); }
+        }
+
+        function processFullImportData(jsonString) {
+            parseImportedFile(jsonString, (decryptedObj, usedPwd) => {
+                if(confirm("ACHTUNG: Dies löscht alle aktuellen Klassen in diesem Browser. Fortfahren?")) {
+                    appData = decryptedObj;
+                    appPassword = usedPwd; 
+                    
+                    // WICHTIG: Einstellungen visuell sofort übernehmen (Der V15 Fix)
+                    loadSettingsUI();
+                    
+                    updateNavUI(); 
+                    loadPlan(); 
+                    saveState(); 
+                    closeSettings();
+                }
+            });
+        }
+        function importFromFileFullLegacy(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => processFullImportData(e.target.result);
+            reader.readAsText(file); event.target.value = '';
+        }
+
+        function processMergeImportData(jsonString) {
+            parseImportedFile(jsonString, (decryptedObj) => {
+                tempMergeData = decryptedObj;
+                if(!tempMergeData.classes) return alert("Ungültige Datenstruktur");
+                
+                const listContainer = document.getElementById('merge-class-list');
+                listContainer.innerHTML = '';
+                
+                for(let cId in tempMergeData.classes) {
+                    let cls = tempMergeData.classes[cId];
+                    let html = `<div class="merge-class-block">`;
+                    html += `<label class="merge-class-header"><input type="checkbox" class="mc-cb" value="${cId}" checked> <span>${cls.name} (Namensliste importieren)</span></label>`;
+                    html += `<div class="merge-plans-list">`;
+                    for(let pId in cls.plans) {
+                        html += `<label><input type="checkbox" class="mp-cb" data-cid="${cId}" value="${pId}" checked> Raum: ${cls.plans[pId].name}</label>`;
+                    }
+                    html += `</div></div>`;
+                    listContainer.innerHTML += html;
+                }
+                
+                closeSettings(); document.getElementById('merge-modal').style.display = 'flex';
+            });
+        }
+        function handleMergeFileLegacy(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => processMergeImportData(e.target.result);
+            reader.readAsText(file); event.target.value = '';
+        }
+
+        function closeMergeModal() { document.getElementById('merge-modal').style.display = 'none'; tempMergeData = null; }
+
+        function executeMerge() {
+            const classCbs = document.querySelectorAll('.mc-cb:checked');
+            if(classCbs.length === 0) return closeMergeModal();
+
+            classCbs.forEach(cb => {
+                let oldCid = cb.value;
+                let oldClass = tempMergeData.classes[oldCid];
+                
+                let newCid = 'c_' + Date.now() + Math.random().toString(36).substr(2, 5);
+                let newClass = { name: oldClass.name, masterNames: [...oldClass.masterNames], plans: {} };
+
+                const planCbs = document.querySelectorAll(`.mp-cb[data-cid="${oldCid}"]:checked`);
+                if(planCbs.length === 0) {
+                    newClass.plans['p_default'] = { name: 'Leerer Raum', furniture: [] };
+                } else {
+                    planCbs.forEach(pcb => {
+                        let oldPid = pcb.value;
+                        let newPid = 'p_' + Date.now() + Math.random().toString(36).substr(2, 5);
+                        newClass.plans[newPid] = JSON.parse(JSON.stringify(oldClass.plans[oldPid]));
+                    });
+                }
+                
+                appData.classes[newCid] = newClass;
+                appData.activeClassId = newCid;
+                appData.activePlanId = Object.keys(newClass.plans)[0];
+            });
+            
+            updateNavUI(); loadPlan(); saveState(); closeMergeModal();
+            alert("Erfolgreich importiert!");
+        }
+
+        // ==========================================
+        // 5. SETTINGS UI
+        // ==========================================
         function openSettings() { document.getElementById('settings-modal').style.display = 'flex'; }
         function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
         
         function applySettings() {
+            appData.settings.teacher = document.getElementById('setting-teacher').value;
+            appData.settings.year = document.getElementById('setting-year').value;
             appData.settings.rsg = document.getElementById('setting-rsg').checked;
             appData.settings.shortNames = document.getElementById('setting-short-names').checked;
             appData.settings.snap = document.getElementById('setting-snap').checked;
@@ -312,268 +645,152 @@
             appData.settings.colorDesk = document.getElementById('setting-color-desk').value;
             appData.settings.colorBg = document.getElementById('setting-color-bg').value;
 
-            // RSG Version Umschaltung
             const rsgLogo = document.getElementById('rsg-logo');
             const topTitle = document.getElementById('top-title');
             const colorControls = document.querySelectorAll('#settings-modal .setting-row input[type="color"]');
 
             if (appData.settings.rsg) {
                 document.body.classList.add('rsg-version');
-                rsgLogo.style.display = 'block';
-                rsgLogo.style.opacity = '1';
+                rsgLogo.style.display = 'block'; rsgLogo.style.opacity = '1';
                 topTitle.innerText = "RSG Sitzplan";
                 colorControls.forEach(control => control.disabled = true);
             } else {
                 document.body.classList.remove('rsg-version');
-                rsgLogo.style.opacity = '0';
-                setTimeout(() => rsgLogo.style.display = 'none', 300);
+                rsgLogo.style.opacity = '0'; setTimeout(() => rsgLogo.style.display = 'none', 300);
                 topTitle.innerText = "SitzplanPro";
                 colorControls.forEach(control => control.disabled = false);
             }
 
-            // CSS Variablen setzen
             document.documentElement.style.setProperty('--global-font-size', appData.settings.fontSize + 'px');
             if (!appData.settings.rsg) {
                 document.documentElement.style.setProperty('--desk-bg', appData.settings.colorDesk);
                 document.documentElement.style.setProperty('--room-bg', appData.settings.colorBg);
             }
             
-            // Re-render
             renderNames();
             document.querySelectorAll('.drop-zone').forEach(dz => {
-                if(dz.dataset.fullName && dz.dataset.fullName !== "Lehrer") {
-                    dz.innerText = formatName(dz.dataset.fullName);
-                }
+                if(dz.dataset.fullName && dz.dataset.fullName !== "Lehrer") dz.innerText = formatName(dz.dataset.fullName);
             });
             saveState();
         }
 
         function loadSettingsUI() {
+            document.getElementById('setting-teacher').value = appData.settings.teacher || '';
+            document.getElementById('setting-year').value = appData.settings.year || '';
             document.getElementById('setting-rsg').checked = appData.settings.rsg;
             document.getElementById('setting-short-names').checked = appData.settings.shortNames;
             document.getElementById('setting-snap').checked = appData.settings.snap !== false;
             document.getElementById('setting-font-size').value = appData.settings.fontSize || 13;
             document.getElementById('setting-color-desk').value = appData.settings.colorDesk || '#fef08a';
             document.getElementById('setting-color-bg').value = appData.settings.colorBg || '#f8fafc';
+            // Die Einstellungen sofort optisch umsetzen
             applySettings();
         }
 
-        // Namens-Formatierung
         function formatName(fullName) {
             if (!fullName) return "";
             if (!appData.settings.shortNames) return fullName;
             let parts = fullName.trim().split(' ');
-            if(parts.length > 1) {
-                return parts[0] + " " + parts[parts.length-1].charAt(0) + ".";
-            }
+            if(parts.length > 1) return parts[0] + " " + parts[parts.length-1].charAt(0) + ".";
             return parts[0];
         }
 
         // ==========================================
-        // 2. CUSTOM DRAG & DROP ENGINE
+        // 6. NAVIGATION (KLASSEN & RÄUME)
         // ==========================================
-        let dragGhost = null;
-        let draggedNameOriginal = "";
-        let currentHoverZone = null;
-
-        function attachDragEvents(element, nameFetcher, isStack) {
-            const startDrag = (e) => {
-                const name = nameFetcher();
-                if(!name || name === "Leer" || name === "Lehrer") return;
-                e.preventDefault();
-                
-                draggedNameOriginal = name;
-                
-                dragGhost = document.createElement('div');
-                dragGhost.id = 'drag-ghost';
-                dragGhost.innerText = formatName(name);
-                document.body.appendChild(dragGhost);
-                
-                moveGhost(e);
-
-                document.addEventListener('mousemove', dragMove);
-                document.addEventListener('touchmove', dragMove, {passive: false});
-                document.addEventListener('mouseup', dragEnd);
-                document.addEventListener('touchend', dragEnd);
-                
-                if(isStack) element.style.opacity = '0.5';
-            };
-
-            element.addEventListener('mousedown', startDrag);
-            element.addEventListener('touchstart', startDrag, {passive: false});
-        }
-
-        function moveGhost(e) {
-            if(!dragGhost) return;
-            const point = e.touches ? e.touches[0] : e;
-            dragGhost.style.left = point.clientX + 'px';
-            dragGhost.style.top = point.clientY + 'px';
-        }
-
-        function dragMove(e) {
-            e.preventDefault();
-            moveGhost(e);
-
-            const point = e.touches ? e.touches[0] : e;
-            const target = document.elementFromPoint(point.clientX, point.clientY);
-
-            if (currentHoverZone && currentHoverZone !== target) {
-                currentHoverZone.classList.remove('hover');
-                currentHoverZone = null;
-            }
-
-            if (target && target.classList.contains('drop-zone')) {
-                currentHoverZone = target;
-                currentHoverZone.classList.add('hover');
-            }
-        }
-
-        function dragEnd(e) {
-            document.removeEventListener('mousemove', dragMove);
-            document.removeEventListener('touchmove', dragMove);
-            document.removeEventListener('mouseup', dragEnd);
-            document.removeEventListener('touchend', dragEnd);
-
-            if (dragGhost) dragGhost.remove();
-            dragGhost = null;
-            document.getElementById('stack-top').style.opacity = '1';
-
-            if (currentHoverZone) {
-                currentHoverZone.classList.remove('hover');
-                
-                const existing = currentHoverZone.dataset.fullName;
-                if(existing && existing !== "Lehrer") studentNames.push(existing);
-
-                currentHoverZone.dataset.fullName = draggedNameOriginal;
-                currentHoverZone.innerText = formatName(draggedNameOriginal);
-
-                studentNames = studentNames.filter(n => n !== draggedNameOriginal);
-                renderNames();
-                saveState();
-                currentHoverZone = null;
-            }
-        }
-
-        function handleZoneClick(ev) {
-            const fullName = ev.target.dataset.fullName;
-            if(fullName && fullName !== "Lehrer") {
-                studentNames.push(fullName);
-                ev.target.dataset.fullName = "";
-                ev.target.innerText = "";
-                renderNames();
-                saveState();
-            }
-        }
-
-        // ==========================================
-        // 3. PLAN-MANAGEMENT & SPEICHERN
-        // ==========================================
-        function saveState() {
-            if(!appData.plans[appData.activePlanId]) return;
-            const currentPlan = appData.plans[appData.activePlanId];
-            currentPlan.names = studentNames;
-            currentPlan.furniture = [];
-
-            canvasEl.querySelectorAll('.furniture').forEach(f => {
-                const typeClass = Array.from(f.classList).find(c => c !== 'furniture' && c !== 'desk' && c !== 'placeholder-item');
-                let seats = [];
-                f.querySelectorAll('.drop-zone').forEach(seat => seats.push(seat.dataset.fullName || ""));
-
-                currentPlan.furniture.push({
-                    id: f.id, type: typeClass,
-                    left: f.style.left, top: f.style.top,
-                    width: f.style.width, height: f.style.height,
-                    rotation: f.dataset.rotation || 0,
-                    seats: seats,
-                    customLabel: f.querySelector('.placeholder-text') ? f.querySelector('.placeholder-text').innerText : ""
-                });
-            });
-            localStorage.setItem('sitzplan_app_data', JSON.stringify(appData));
-        }
-
-        function loadAppData() {
-            const saved = localStorage.getItem('sitzplan_app_data');
-            if (saved) {
-                try { 
-                    const parsed = JSON.parse(saved);
-                    appData = { ...appData, ...parsed };
-                    appData.settings = { ...appData.settings, ...(parsed.settings || {}) };
-                } catch(e) {}
-            }
-            loadSettingsUI();
-            updatePlanSelectUI();
-            loadPlan(appData.activePlanId);
-        }
-
-        function updatePlanSelectUI() {
-            const select = document.getElementById('plan-select');
-            select.innerHTML = '';
-            for (let id in appData.plans) {
+        function updateNavUI() {
+            const classSelect = document.getElementById('class-select');
+            classSelect.innerHTML = '';
+            for (let cId in appData.classes) {
                 const opt = document.createElement('option');
-                opt.value = id; opt.innerText = appData.plans[id].name;
-                if (id === appData.activePlanId) opt.selected = true;
-                select.appendChild(opt);
+                opt.value = cId; opt.innerText = appData.classes[cId].name;
+                if (cId === appData.activeClassId) opt.selected = true;
+                classSelect.appendChild(opt);
+            }
+
+            const planSelect = document.getElementById('plan-select');
+            planSelect.innerHTML = '';
+            const activeClass = appData.classes[appData.activeClassId];
+            if(activeClass && activeClass.plans) {
+                for (let pId in activeClass.plans) {
+                    const opt = document.createElement('option');
+                    opt.value = pId; opt.innerText = activeClass.plans[pId].name;
+                    if (pId === appData.activePlanId) opt.selected = true;
+                    planSelect.appendChild(opt);
+                }
             }
         }
 
-        function switchPlan() { saveState(); appData.activePlanId = document.getElementById('plan-select').value; loadPlan(appData.activePlanId); }
-        function createNewPlan() {
-            const name = prompt("Name des neuen Plans:");
+        function switchClass() { saveState(); appData.activeClassId = document.getElementById('class-select').value; appData.activePlanId = Object.keys(appData.classes[appData.activeClassId].plans)[0]; updateNavUI(); loadPlan(); }
+        function switchPlan() { saveState(); appData.activePlanId = document.getElementById('plan-select').value; loadPlan(); }
+
+        function createNewClass() {
+            const name = prompt("Name der neuen Klasse (z.B. 7B):");
             if (!name) return;
             saveState();
-            const newId = 'plan_' + Date.now();
-            appData.plans[newId] = { name: name, names: [], furniture: [] };
-            appData.activePlanId = newId;
-            updatePlanSelectUI(); loadPlan(newId); saveState();
+            const newId = 'c_' + Date.now();
+            appData.classes[newId] = { name: name, masterNames: [], plans: { 'p_default': { name: 'Raum 1', furniture: [] } } };
+            appData.activeClassId = newId; appData.activePlanId = 'p_default';
+            updateNavUI(); loadPlan(); saveState();
         }
-        function renameCurrentPlan() {
-            const name = prompt("Neuer Name:", appData.plans[appData.activePlanId].name);
-            if (name) { appData.plans[appData.activePlanId].name = name; updatePlanSelectUI(); saveState(); }
+        function renameCurrentClass() {
+            const name = prompt("Klasse umbenennen:", appData.classes[appData.activeClassId].name);
+            if (name) { appData.classes[appData.activeClassId].name = name; updateNavUI(); saveState(); }
         }
-        function deleteCurrentPlan() {
-            if(Object.keys(appData.plans).length <= 1) { alert("Du musst mindestens einen Plan behalten."); return; }
-            if(confirm("Möchtest du diesen Plan wirklich löschen?")) {
-                delete appData.plans[appData.activePlanId];
-                appData.activePlanId = Object.keys(appData.plans)[0];
-                updatePlanSelectUI(); loadPlan(appData.activePlanId); saveState(); closeSettings();
+        function deleteCurrentClass() {
+            if(Object.keys(appData.classes).length <= 1) { alert("Du musst mindestens eine Klasse behalten."); return; }
+            if(confirm("Klasse wirklich löschen?")) {
+                delete appData.classes[appData.activeClassId];
+                appData.activeClassId = Object.keys(appData.classes)[0];
+                appData.activePlanId = Object.keys(appData.classes[appData.activeClassId].plans)[0];
+                updateNavUI(); loadPlan(); saveState();
             }
         }
 
-        function loadPlan(planId) {
+        function createNewPlan() {
+            const name = prompt("Name des neuen Raums (z.B. R150):");
+            if (!name) return;
+            saveState();
+            const newId = 'p_' + Date.now();
+            appData.classes[appData.activeClassId].plans[newId] = { name: name, furniture: [] };
+            appData.activePlanId = newId; updateNavUI(); loadPlan(); saveState();
+        }
+        function renameCurrentPlan() {
+            const plan = appData.classes[appData.activeClassId].plans[appData.activePlanId];
+            const name = prompt("Raum umbenennen:", plan.name);
+            if (name) { plan.name = name; updateNavUI(); saveState(); }
+        }
+        function deleteCurrentPlan() {
+            const plans = appData.classes[appData.activeClassId].plans;
+            if(Object.keys(plans).length <= 1) { alert("Jede Klasse braucht mindestens einen Raum."); return; }
+            if(confirm("Raum wirklich löschen?")) {
+                delete plans[appData.activePlanId];
+                appData.activePlanId = Object.keys(plans)[0]; updateNavUI(); loadPlan(); saveState();
+            }
+        }
+
+        // ==========================================
+        // 7. PLAN LADEN & ALPHABETISCHE LISTE
+        // ==========================================
+        function loadPlan() {
             canvasEl.innerHTML = ''; furnitureIdCounter = 0;
-            const plan = appData.plans[planId];
-            studentNames = plan.names || [];
-            document.getElementById('name-input').value = studentNames.join('\n');
-            renderNames();
+            const activeClass = appData.classes[appData.activeClassId];
+            const plan = activeClass.plans[appData.activePlanId];
+            
+            document.getElementById('name-input').value = (activeClass.masterNames || []).join('\n');
 
             (plan.furniture || []).forEach(item => {
                 let numId = parseInt(item.id.replace('furn_', ''));
                 if (numId >= furnitureIdCounter) furnitureIdCounter = numId + 1;
                 createFurnitureElement(item.type, item.customLabel, item);
             });
-            updateInputs(); resetView();
+            
+            updateInputs(); resetView(); renderNames(); 
         }
 
-        function exportToFile() {
-            saveState();
-            const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sitzplaene.json'; a.click();
-        }
-        function importFromFile(event) {
-            const file = event.target.files[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try { appData = JSON.parse(e.target.result); updatePlanSelectUI(); loadPlan(appData.activePlanId); saveState(); closeSettings(); } 
-                catch (err) { alert("Fehler beim Lesen der Datei!"); }
-            };
-            reader.readAsText(file); event.target.value = '';
-        }
-
-        // ==========================================
-        // 4. LISTEN & RENDERING
-        // ==========================================
-        function importNamesFromText() {
-            studentNames = document.getElementById('name-input').value.split('\n').map(n => n.trim()).filter(n => n !== '');
+        function updateMasterList() {
+            const input = document.getElementById('name-input').value;
+            appData.classes[appData.activeClassId].masterNames = input.split('\n').map(n => n.trim()).filter(n => n !== '');
             renderNames(); saveState();
         }
 
@@ -587,7 +804,8 @@
                     let newNames = [];
                     jsonData.forEach(row => { if (row[0] && typeof row[0] === 'string' && row[0].trim() !== '') newNames.push(row[0].trim()); });
                     if(newNames.length > 0) {
-                        studentNames = newNames; document.getElementById('name-input').value = studentNames.join('\n');
+                        appData.classes[appData.activeClassId].masterNames = newNames; 
+                        document.getElementById('name-input').value = newNames.join('\n');
                         renderNames(); saveState(); alert(`${newNames.length} Namen importiert!`);
                     }
                 } catch (err) { alert("Fehler bei Excel-Datei."); }
@@ -595,123 +813,156 @@
             reader.readAsArrayBuffer(file); event.target.value = '';
         }
 
+        function getAssignedNames() {
+            let assigned = [];
+            canvasEl.querySelectorAll('.drop-zone').forEach(seat => {
+                const name = seat.dataset.fullName;
+                if(name && name !== "Lehrer") assigned.push(name);
+            });
+            return assigned;
+        }
+
+        function getSortKey(fullName) {
+            let parts = fullName.trim().split(/\s+/);
+            if (parts.length > 1) {
+                let lastName = parts.pop();
+                let firstNames = parts.join(' ');
+                return `${lastName}, ${firstNames}`.toLowerCase();
+            }
+            return fullName.toLowerCase();
+        }
+
         function renderNames() {
             const listContainer = document.getElementById('list-container');
             listContainer.innerHTML = '';
             
-            studentNames.forEach((name, index) => {
+            const activeClass = appData.classes[appData.activeClassId];
+            const assigned = getAssignedNames();
+            
+            let unassignedNames = (activeClass.masterNames || []).filter(n => !assigned.includes(n));
+            unassignedNames.sort((a, b) => getSortKey(a).localeCompare(getSortKey(b), 'de'));
+            
+            unassignedNames.forEach((name) => {
                 const div = document.createElement('div');
-                div.className = 'name-item';
-                div.innerText = formatName(name);
+                div.className = 'name-item'; div.innerText = formatName(name);
                 attachDragEvents(div, () => name, false);
                 listContainer.appendChild(div);
             });
 
             const stackTop = document.getElementById('stack-top');
             const stackCount = document.getElementById('stack-count');
-            
             const newStackTop = stackTop.cloneNode(true);
             stackTop.parentNode.replaceChild(newStackTop, stackTop);
 
-            if (studentNames.length > 0) {
-                newStackTop.innerText = formatName(studentNames[0]);
+            if (unassignedNames.length > 0) {
+                newStackTop.innerText = formatName(unassignedNames[0]);
                 newStackTop.style.cursor = 'grab';
-                attachDragEvents(newStackTop, () => studentNames[0], true);
-                stackCount.innerText = `${studentNames.length} übrig`;
+                attachDragEvents(newStackTop, () => unassignedNames[0], true);
+                stackCount.innerText = `${unassignedNames.length} übrig`;
             } else {
-                newStackTop.innerText = "Leer";
+                newStackTop.innerText = "Alle verteilt!";
                 newStackTop.style.cursor = 'default';
                 stackCount.innerText = `0 übrig`;
             }
         }
 
+        // ==========================================
+        // 8. DRAG ENGINE, ZOOM & PAN, MÖBEL
+        // ==========================================
         document.getElementById('toggle-sidebar').addEventListener('click', () => {
             document.getElementById('sidebar').classList.toggle('collapsed');
             document.getElementById('sidebar-title').style.display = document.getElementById('sidebar').classList.contains('collapsed') ? 'none' : 'block';
         });
 
-        // ==========================================
-        // 5. ZOOM & PAN (Kamera)
-        // ==========================================
-        function updateTransform() {
-            canvasEl.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-            document.getElementById('zoom-level').innerText = Math.round(scale * 100) + '%';
+        let dragGhost = null, draggedNameOriginal = "", currentHoverZone = null;
+
+        function attachDragEvents(element, nameFetcher, isStack) {
+            const startDrag = (e) => {
+                const name = nameFetcher();
+                if(!name || name === "Alle verteilt!" || name === "Lehrer") return;
+                e.preventDefault(); draggedNameOriginal = name;
+                
+                dragGhost = document.createElement('div'); dragGhost.id = 'drag-ghost'; dragGhost.innerText = formatName(name);
+                document.body.appendChild(dragGhost);
+                
+                moveGhost(e);
+                document.addEventListener('mousemove', dragMove); document.addEventListener('touchmove', dragMove, {passive: false});
+                document.addEventListener('mouseup', dragEnd); document.addEventListener('touchend', dragEnd);
+                if(isStack) element.style.opacity = '0.5';
+            };
+            element.addEventListener('mousedown', startDrag); element.addEventListener('touchstart', startDrag, {passive: false});
         }
 
-        function setZoom(amount) {
-            scale = Math.min(Math.max(0.4, scale + amount), 2.5);
-            updateTransform();
+        function moveGhost(e) {
+            if(!dragGhost) return;
+            const point = e.touches ? e.touches[0] : e;
+            dragGhost.style.left = point.clientX + 'px'; dragGhost.style.top = point.clientY + 'px';
         }
 
+        function dragMove(e) {
+            e.preventDefault(); moveGhost(e);
+            const point = e.touches ? e.touches[0] : e;
+            const target = document.elementFromPoint(point.clientX, point.clientY);
+
+            if (currentHoverZone && currentHoverZone !== target) { currentHoverZone.classList.remove('hover'); currentHoverZone = null; }
+            if (target && target.classList.contains('drop-zone')) { currentHoverZone = target; currentHoverZone.classList.add('hover'); }
+        }
+
+        function dragEnd(e) {
+            document.removeEventListener('mousemove', dragMove); document.removeEventListener('touchmove', dragMove);
+            document.removeEventListener('mouseup', dragEnd); document.removeEventListener('touchend', dragEnd);
+
+            if (dragGhost) dragGhost.remove(); dragGhost = null;
+            document.getElementById('stack-top').style.opacity = '1';
+
+            if (currentHoverZone) {
+                currentHoverZone.classList.remove('hover');
+                currentHoverZone.dataset.fullName = draggedNameOriginal;
+                currentHoverZone.innerText = formatName(draggedNameOriginal);
+                renderNames(); saveState(); currentHoverZone = null;
+            }
+        }
+
+        function handleZoneClick(ev) {
+            if(ev.target.dataset.fullName && ev.target.dataset.fullName !== "Lehrer") {
+                ev.target.dataset.fullName = ""; ev.target.innerText = "";
+                renderNames(); saveState();
+            }
+        }
+
+        function updateTransform() { canvasEl.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; document.getElementById('zoom-level').innerText = Math.round(scale * 100) + '%'; }
+        function setZoom(amount) { scale = Math.min(Math.max(0.4, scale + amount), 2.5); updateTransform(); }
         function resetView() { scale = 1; panX = 0; panY = 0; updateTransform(); }
 
         roomEl.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(-e.deltaY * 0.001); }, {passive: false});
-
-        const startPan = (e) => {
-            if (e.target !== roomEl && e.target !== canvasEl) return;
-            e.preventDefault(); isPanning = true;
-        };
-        roomEl.addEventListener('mousedown', startPan);
-        roomEl.addEventListener('touchstart', startPan, {passive: false});
-
+        const startPan = (e) => { if (e.target !== roomEl && e.target !== canvasEl) return; e.preventDefault(); isPanning = true; };
+        roomEl.addEventListener('mousedown', startPan); roomEl.addEventListener('touchstart', startPan, {passive: false});
         const doPan = (e) => {
-            if (!isPanning) return;
-            e.preventDefault();
-            const movementX = e.movementX || (e.touches[0].clientX - (doPan.lastX || e.touches[0].clientX));
-            const movementY = e.movementY || (e.touches[0].clientY - (doPan.lastY || e.touches[0].clientY));
-            
-            panX += movementX; panY += movementY;
-            updateTransform();
-
-            if(e.touches) { doPan.lastX = e.touches[0].clientX; doPan.lastY = e.touches[0].clientY; }
+            if (!isPanning) return; e.preventDefault();
+            panX += e.movementX || (e.touches[0].clientX - (doPan.lastX || e.touches[0].clientX));
+            panY += e.movementY || (e.touches[0].clientY - (doPan.lastY || e.touches[0].clientY));
+            updateTransform(); if(e.touches) { doPan.lastX = e.touches[0].clientX; doPan.lastY = e.touches[0].clientY; }
         };
-        window.addEventListener('mousemove', doPan);
-        window.addEventListener('touchmove', doPan, {passive: false});
-
+        window.addEventListener('mousemove', doPan); window.addEventListener('touchmove', doPan, {passive: false});
         const endPan = () => { isPanning = false; doPan.lastX = null; doPan.lastY = null; };
-        window.addEventListener('mouseup', endPan);
-        window.addEventListener('touchend', endPan);
+        window.addEventListener('mouseup', endPan); window.addEventListener('touchend', endPan);
 
-        // ==========================================
-        // 6. MÖBEL GENERIERUNG & LOGIK
-        // ==========================================
         function changeCount(type, amount) {
             const input = document.getElementById('count-' + type);
-            let newVal = parseInt(input.value) + amount;
-            if(newVal < 0) newVal = 0;
+            let newVal = parseInt(input.value) + amount; if(newVal < 0) newVal = 0;
             input.value = newVal; syncRoom(type); saveState();
         }
 
         function syncRoom(type) {
             const currentElements = canvasEl.querySelectorAll('.' + type);
             const targetCount = parseInt(document.getElementById('count-' + type).value);
-            
-            if (targetCount > currentElements.length) {
-                for (let i = 0; i < (targetCount - currentElements.length); i++) createFurnitureElement(type);
-            } else if (targetCount < currentElements.length) {
-                for (let i = 0; i < (currentElements.length - targetCount); i++) {
-                    const el = currentElements[currentElements.length - 1 - i];
-                    el.querySelectorAll('.drop-zone').forEach(seat => {
-                        const name = seat.dataset.fullName;
-                        if(name && name !== "Lehrer") studentNames.push(name);
-                    });
-                    el.remove();
-                }
-                renderNames();
-            }
+            if (targetCount > currentElements.length) { for (let i = 0; i < (targetCount - currentElements.length); i++) createFurnitureElement(type); } 
+            else if (targetCount < currentElements.length) { for (let i = 0; i < (currentElements.length - targetCount); i++) currentElements[currentElements.length - 1 - i].remove(); renderNames(); }
         }
 
-        function updateInputs() {
-            ['desk-single', 'desk-double', 'teacher-desk', 'board'].forEach(type => {
-                const el = document.getElementById('count-' + type);
-                if(el) el.value = canvasEl.querySelectorAll('.' + type).length;
-            });
-        }
+        function updateInputs() { ['desk-single', 'desk-double', 'teacher-desk', 'board'].forEach(type => { const el = document.getElementById('count-' + type); if(el) el.value = canvasEl.querySelectorAll('.' + type).length; }); }
 
-        function addPlaceholder() {
-            const label = prompt("Beschriftung (z.B. Tür):", "Schrank");
-            if(label) { createFurnitureElement('placeholder', label); saveState(); }
-        }
+        function addPlaceholder() { const label = prompt("Beschriftung (z.B. Tür):", "Schrank"); if(label) { createFurnitureElement('placeholder', label); saveState(); } }
 
         function createFurnitureElement(typeClass, customLabel = "", savedData = null) {
             const elem = document.createElement('div');
@@ -728,169 +979,102 @@
                 elem.style.top = (-panY/scale + roomEl.clientHeight/2 / scale - 40) + 'px';
             }
 
-            const btnDel = document.createElement('button');
-            btnDel.className = 'control-icon delete-btn'; btnDel.innerHTML = '&#10005;';
-            btnDel.onclick = () => { 
-                elem.querySelectorAll('.drop-zone').forEach(seat => {
-                    if(seat.dataset.fullName && seat.dataset.fullName !== "Lehrer") studentNames.push(seat.dataset.fullName);
-                });
-                renderNames(); elem.remove(); updateInputs(); saveState();
-            };
-            elem.appendChild(btnDel);
-
-            const handleRot = document.createElement('div');
-            handleRot.className = 'control-icon rotate-handle'; handleRot.innerHTML = '&#8635;';
-            elem.appendChild(handleRot);
+            const btnDel = document.createElement('button'); btnDel.className = 'control-icon delete-btn'; btnDel.innerHTML = '&#10005;';
+            btnDel.onclick = () => { elem.remove(); renderNames(); updateInputs(); saveState(); }; elem.appendChild(btnDel);
+            const handleRot = document.createElement('div'); handleRot.className = 'control-icon rotate-handle'; handleRot.innerHTML = '&#8635;'; elem.appendChild(handleRot);
 
             if(typeClass === 'board') {
                 const boardText = document.createElement('div'); boardText.className = 'board-text'; boardText.innerText = "Whiteboard"; elem.appendChild(boardText);
             } else if (typeClass === 'placeholder') {
-                const phText = document.createElement('div'); phText.className = 'placeholder-text'; phText.innerText = savedData ? savedData.customLabel : customLabel; elem.appendChild(phText);
+                const phText = document.createElement('div'); phText.className = 'placeholder-text'; phText.innerText = savedData ? customLabel : customLabel; elem.appendChild(phText);
             } else {
                 const seatsContainer = document.createElement('div'); seatsContainer.className = 'seats-container';
                 let seatCount = typeClass === 'desk-double' ? 2 : 1;
-                
                 for(let i=0; i<seatCount; i++) {
                     const seat = document.createElement('div'); seat.className = 'drop-zone';
-                    
-                    if(savedData && savedData.seats && savedData.seats[i]) {
-                        seat.dataset.fullName = savedData.seats[i];
-                        seat.innerText = formatName(savedData.seats[i]);
-                    } else if(typeClass === 'teacher-desk') {
-                        seat.dataset.fullName = "Lehrer";
-                        seat.innerText = "Lehrer";
-                    }
-                    
-                    seat.onclick = handleZoneClick;
-                    seatsContainer.appendChild(seat);
+                    if(savedData && savedData.seats && savedData.seats[i]) { seat.dataset.fullName = savedData.seats[i]; seat.innerText = formatName(savedData.seats[i]); } 
+                    else if(typeClass === 'teacher-desk') { seat.dataset.fullName = "Lehrer"; seat.innerText = "Lehrer"; }
+                    seat.onclick = handleZoneClick; seatsContainer.appendChild(seat);
                 }
                 elem.appendChild(seatsContainer);
             }
-            canvasEl.appendChild(elem);
-            makeMovable(elem);
+            canvasEl.appendChild(elem); makeMovable(elem);
         }
 
-        // ==========================================
-        // 7. BEWEGUNG & ROTATION
-        // ==========================================
         function getVisualBounds(el, offsetL, offsetT) {
-            let w = el.offsetWidth, h = el.offsetHeight;
-            let cx = offsetL + w / 2, cy = offsetT + h / 2;
-            let rot = (parseInt(el.dataset.rotation) || 0) % 180;
+            let w = el.offsetWidth, h = el.offsetHeight, cx = offsetL + w / 2, cy = offsetT + h / 2, rot = (parseInt(el.dataset.rotation) || 0) % 180;
             if (Math.abs(rot) === 90) return { left: cx - h/2, right: cx + h/2, top: cy - w/2, bottom: cy + w/2, cx: cx, cy: cy };
             return { left: cx - w/2, right: cx + w/2, top: cy - h/2, bottom: cy + h/2, cx: cx, cy: cy };
         }
 
         function makeMovable(element) {
-            let isDraggingObj = false, isRotating = false;
-            let pos3 = 0, pos4 = 0, cx, cy, startAngle, startRot, currentX = 0, currentY = 0; 
-
+            let isDraggingObj = false, isRotating = false, pos3 = 0, pos4 = 0, cx, cy, startAngle, startRot, currentX = 0, currentY = 0; 
             const startAction = (e) => {
                 if (e.target.classList.contains('delete-btn')) return;
-                
                 const point = e.touches ? e.touches[0] : e;
                 const rect = element.getBoundingClientRect();
-                const offsetX = (point.clientX - rect.left) / scale;
-                const offsetY = (point.clientY - rect.top) / scale;
-                if (offsetX > element.offsetWidth - 25 && offsetY > element.offsetHeight - 25) return;
-
+                if ((point.clientX - rect.left) / scale > element.offsetWidth - 25 && (point.clientY - rect.top) / scale > element.offsetHeight - 25) return;
                 e.preventDefault(); 
-
                 if (e.target.classList.contains('rotate-handle')) {
-                    isRotating = true;
-                    cx = rect.left + rect.width / 2; cy = rect.top + rect.height / 2;
-                    startAngle = Math.atan2(point.clientY - cy, point.clientX - cx) * 180 / Math.PI;
-                    startRot = parseFloat(element.dataset.rotation) || 0;
-                    
-                    document.addEventListener('mousemove', rotateEl);
-                    document.addEventListener('touchmove', rotateEl, {passive: false});
-                    document.addEventListener('mouseup', stopAction);
-                    document.addEventListener('touchend', stopAction);
-                    return;
+                    isRotating = true; cx = rect.left + rect.width / 2; cy = rect.top + rect.height / 2;
+                    startAngle = Math.atan2(point.clientY - cy, point.clientX - cx) * 180 / Math.PI; startRot = parseFloat(element.dataset.rotation) || 0;
+                    document.addEventListener('mousemove', rotateEl); document.addEventListener('touchmove', rotateEl, {passive: false});
+                    document.addEventListener('mouseup', stopAction); document.addEventListener('touchend', stopAction); return;
                 }
-
-                isDraggingObj = true;
-                pos3 = point.clientX; pos4 = point.clientY;
-                currentX = element.offsetLeft; currentY = element.offsetTop;
-                
-                document.addEventListener('mousemove', dragEl);
-                document.addEventListener('touchmove', dragEl, {passive: false});
-                document.addEventListener('mouseup', stopAction);
-                document.addEventListener('touchend', stopAction);
+                isDraggingObj = true; pos3 = point.clientX; pos4 = point.clientY; currentX = element.offsetLeft; currentY = element.offsetTop;
+                document.addEventListener('mousemove', dragEl); document.addEventListener('touchmove', dragEl, {passive: false});
+                document.addEventListener('mouseup', stopAction); document.addEventListener('touchend', stopAction);
             };
-
-            element.addEventListener('mousedown', startAction);
-            element.addEventListener('touchstart', startAction, {passive: false});
+            element.addEventListener('mousedown', startAction); element.addEventListener('touchstart', startAction, {passive: false});
 
             function dragEl(e) {
-                if (!isDraggingObj) return;
-                e.preventDefault();
+                if (!isDraggingObj) return; e.preventDefault();
                 const point = e.touches ? e.touches[0] : e;
-                
-                const pos1 = (pos3 - point.clientX) / scale;
-                const pos2 = (pos4 - point.clientY) / scale;
+                currentX -= (pos3 - point.clientX) / scale; currentY -= (pos4 - point.clientY) / scale;
                 pos3 = point.clientX; pos4 = point.clientY;
-
-                currentX -= pos1; currentY -= pos2;
                 let renderX = currentX, renderY = currentY;
 
                 if (appData.settings.snap) {
-                    let snapTol = 8 / scale; 
-                    let v1 = getVisualBounds(element, renderX, renderY);
-                    let minDx = snapTol + 1, minDy = snapTol + 1;
-
+                    let snapTol = 8 / scale, v1 = getVisualBounds(element, renderX, renderY), minDx = snapTol + 1, minDy = snapTol + 1;
                     for (let other of canvasEl.querySelectorAll('.furniture')) {
                         if (other === element) continue;
                         let v2 = getVisualBounds(other, other.offsetLeft, other.offsetTop);
                         if (Math.hypot(v1.cx - v2.cx, v1.cy - v2.cy) > 300) continue; 
-
-                        for(let dx of [v2.right - v1.left, v2.left - v1.right, v2.left - v1.left, v2.right - v1.right, v2.cx - v1.cx]) { 
-                            if(Math.abs(dx) < Math.abs(minDx)) minDx = dx; 
-                        }
-                        for(let dy of [v2.bottom - v1.top, v2.top - v1.bottom, v2.top - v1.top, v2.bottom - v1.bottom, v2.cy - v1.cy]) { 
-                            if(Math.abs(dy) < Math.abs(minDy)) minDy = dy; 
-                        }
+                        for(let dx of [v2.right - v1.left, v2.left - v1.right, v2.left - v1.left, v2.right - v1.right, v2.cx - v1.cx]) { if(Math.abs(dx) < Math.abs(minDx)) minDx = dx; }
+                        for(let dy of [v2.bottom - v1.top, v2.top - v1.bottom, v2.top - v1.top, v2.bottom - v1.bottom, v2.cy - v1.cy]) { if(Math.abs(dy) < Math.abs(minDy)) minDy = dy; }
                     }
-                    if (Math.abs(minDx) <= snapTol) renderX += minDx;
-                    if (Math.abs(minDy) <= snapTol) renderY += minDy;
+                    if (Math.abs(minDx) <= snapTol) renderX += minDx; if (Math.abs(minDy) <= snapTol) renderY += minDy;
                 }
                 element.style.left = renderX + "px"; element.style.top = renderY + "px";
             }
-
             function rotateEl(e) {
-                if (!isRotating) return;
-                e.preventDefault();
+                if (!isRotating) return; e.preventDefault();
                 const point = e.touches ? e.touches[0] : e;
                 let newRot = startRot + (Math.atan2(point.clientY - cy, point.clientX - cx) * 180 / Math.PI - startAngle);
                 let snappedRot = Math.round(newRot / 90) * 90;
                 if (Math.abs(newRot - snappedRot) < 15) newRot = snappedRot;
-                element.style.transform = `rotate(${newRot}deg)`;
-                element.dataset.rotation = newRot;
+                element.style.transform = `rotate(${newRot}deg)`; element.dataset.rotation = newRot;
             }
-
             function stopAction() {
                 isDraggingObj = false; isRotating = false;
-                document.removeEventListener('mousemove', dragEl);
-                document.removeEventListener('touchmove', dragEl);
-                document.removeEventListener('mousemove', rotateEl);
-                document.removeEventListener('touchmove', rotateEl);
-                document.removeEventListener('mouseup', stopAction);
-                document.removeEventListener('touchend', stopAction);
+                document.removeEventListener('mousemove', dragEl); document.removeEventListener('touchmove', dragEl);
+                document.removeEventListener('mousemove', rotateEl); document.removeEventListener('touchmove', rotateEl);
+                document.removeEventListener('mouseup', stopAction); document.removeEventListener('touchend', stopAction);
                 saveState();
             }
         }
 
-        // Init
-        window.onload = function() {
-            window.addEventListener('mouseup', (e) => { if(e.target.closest('.furniture')) setTimeout(saveState, 50); });
-            window.addEventListener('touchend', (e) => { if(e.target.closest('.furniture')) setTimeout(saveState, 50); });
-            loadAppData();
-            updateTransform();
-            
-            document.getElementById('settings-modal').addEventListener('click', (e) => {
-                if(e.target === document.getElementById('settings-modal')) closeSettings();
-            });
-        };
+        // Drucken PDF
+        function printPlan() {
+            resetView(); closeSettings();
+            const className = appData.classes[appData.activeClassId].name;
+            const planName = appData.classes[appData.activeClassId].plans[appData.activePlanId].name;
+            const year = appData.settings.year || "Laufendes Schuljahr";
+            const teacher = appData.settings.teacher ? `| Lehrkraft: ${appData.settings.teacher}` : "";
+            document.getElementById('print-title').innerText = `${className} - ${planName}`;
+            document.getElementById('print-subtitle').innerText = `${year} ${teacher}`;
+            setTimeout(() => { window.print(); }, 200);
+        }
     </script>
 </body>
 </html>
